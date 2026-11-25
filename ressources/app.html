@@ -881,6 +881,7 @@ function reglages(){
     <div><div class="grp-title">Notifications</div><div class="grp">
       <div class="cell"><label class="toggle" style="color:var(--text);font-size:15px;justify-content:space-between;width:100%"><span>Prévenir quand un prix m'intéresse</span><input type="checkbox" id="r-notif" ${R.notifications ? "checked" : ""}><span class="switch"></span></label></div>
       <div class="cell"><span class="lab">Vérifier</span><button class="btn link" id="r-test">Envoyer une notification de test</button></div>
+      <div class="cell"><span class="lab">Autorisations</span><button class="btn link" id="r-ouvrir">Ouvrir les réglages de l'ordinateur</button></div>
     </div></div>
     <div><div class="grp-title">Recherche automatique</div><div class="grp">
       <div class="cell"><span class="lab">Chaque jour à 9 h</span><span class="muted">${R.programmee ? "Activée" : "Inactive"}</span></div>
@@ -906,6 +907,7 @@ function reglages(){
   const rv = $("#r-verif"); if (rv) rv.onclick = async () => { rv.textContent = "Vérification…";
     const m = await api("/api/maj", {}).catch(() => null); if (m) D.reglages.maj = m;
     if (m && m.disponible) { reglages(); dessinerPied(); } else { rv.textContent = m && m.erreur ? "Pas de connexion" : "Vous avez la dernière version"; } };
+  $("#r-ouvrir").onclick = () => api("/api/ouvrir-reglages", {}).catch(e => toast(e.message));
   $("#r-tuto").onclick = () => { d.close(); tutoriel(); };
   $("#r-notif").onchange = async e => { await api("/api/reglages", {notifications: e.target.checked}); R.notifications = e.target.checked; };
   $("#r-test").onclick = async () => { try { await api("/api/test-notif", {}); toast("Notification envoyée"); } catch (e) { toast("Les notifications sont bloquées par le système"); } };
@@ -1177,7 +1179,9 @@ function tutoriel(){
       </div>
       <div class="rangee" id="t-aide" hidden><div><b>Autoriser les notifications</b><small>${mac
         ? "Ouvrez <b>Réglages Système</b> &gt; <b>Notifications</b>, cherchez <b>Éditeur de script</b> (c'est lui qui affiche les alertes de Trackflight), puis activez <b>Autoriser les notifications</b>. Réessayez ensuite."
-        : "Ouvrez <b>Paramètres</b> &gt; <b>Système</b> &gt; <b>Notifications</b> et vérifiez que les notifications sont activées, et que le mode <b>Ne pas déranger</b> est désactivé. Réessayez ensuite."}</small></div></div>`,
+        : "Ouvrez <b>Paramètres</b> &gt; <b>Système</b> &gt; <b>Notifications</b> et vérifiez que les notifications sont activées, et que le mode <b>Ne pas déranger</b> est désactivé. Réessayez ensuite."}</small></div>
+        <button class="btn primary" id="t-reglages" style="flex:none">Ouvrir les réglages</button></div>
+      ${mac ? `<p class="aide">Si le Mac demande l’autorisation pour « Éditeur de script », cliquez sur <b>Autoriser</b> : c’est lui qui affiche les alertes de Trackflight.</p>` : ""}`,
     () => {
       const ok = R.programmee, a = R.app;
       return `<h2>Les prix se mettent à jour tout seuls</h2><p class="aide">Chaque jour à 9 h, Trackflight compare les prix de vos voyages. Si l'ordinateur était éteint, il le fait au démarrage suivant. Pas besoin d'ouvrir l'app.</p>
@@ -1211,6 +1215,7 @@ function tutoriel(){
     };
     const oui = $("#t-oui"); if (oui) oui.onclick = () => { $("#t-aide").hidden = true; sens = 1; i++; rendre(); };
     const non = $("#t-non"); if (non) non.onclick = () => { $("#t-aide").hidden = false; };
+    const tr = $("#t-reglages"); if (tr) tr.onclick = () => api("/api/ouvrir-reglages", {}).catch(e => toast(e.message));
   };
   const finir = async () => {
     wiz.hidden = true; document.body.style.overflow = "";

@@ -207,6 +207,19 @@ class Gestionnaire(BaseHTTPRequestHandler):
             ouvrir_fichier(dest)
             return self._envoyer(200, {"ok": True, "chemin": dest})
 
+        if chemin == "/api/ouvrir-reglages":
+            # Ouvre la page des notifications de l'ordinateur (adresses système fixes, aucune saisie utilisée).
+            try:
+                if chemins.SYSTEME == "Windows":
+                    os.startfile("ms-settings:notifications")
+                elif chemins.SYSTEME == "Darwin":
+                    r = subprocess.run(["open", "x-apple.systempreferences:com.apple.Notifications-Settings.extension"])
+                    if r.returncode:
+                        subprocess.run(["open", "x-apple.systempreferences:com.apple.preference.notifications"])
+                return self._envoyer(200, {"ok": True})
+            except OSError:
+                return self._envoyer(500, {"erreur": "Impossible d'ouvrir les réglages."})
+
         if chemin == "/api/test-notif":
             ok = notif.envoyer("Trackflight", "Les notifications fonctionnent. Vous serez prévenu quand un prix vous intéresse.")
             return self._envoyer(200 if ok else 502, {"ok": ok})
