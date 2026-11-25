@@ -1,0 +1,8 @@
+.venv-build/
+build/
+dist/
+sortie/
+dmg/
+icones/
+__pycache__/
+*.pyc
