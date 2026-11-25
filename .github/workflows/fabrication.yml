@@ -18,7 +18,7 @@ jobs:
         include:
           - os: windows-latest
             nom: Windows
-          - os: macos-14
+          - os: macos-15
             nom: Mac-Apple
           - os: macos-15-intel
             nom: Mac-Intel
@@ -73,7 +73,8 @@ jobs:
 
   publier:
     needs: fabriquer
-    if: startsWith(github.ref, 'refs/tags/v')
+    # publie même si une version manque (ex. Mac Apple faute de machine) : elle s'ajoutera en relançant le job
+    if: always() && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

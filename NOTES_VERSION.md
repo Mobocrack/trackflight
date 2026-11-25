@@ -13,6 +13,7 @@ Si vous aviez installé « Mes vols » (l'ancien nom), Trackflight le remplace :
 1. Vérifiez votre modèle : menu  > **À propos de ce Mac**.
    - « Puce Apple M1, M2, M3, M4… » : téléchargez **Trackflight-Mac-Apple.dmg**
    - « Processeur Intel » : téléchargez **Trackflight-Mac-Intel.dmg**
+   - Si la version « Mac-Apple » n'est pas encore sur cette page, la version Intel fonctionne aussi sur les Mac à puce Apple : au premier lancement, acceptez l'installation de **Rosetta** proposée par le Mac.
 2. Ouvrez le fichier, puis **glissez Trackflight dans le dossier Applications**.
 3. Ouvrez Trackflight depuis Applications. Le Mac affiche « Apple n'a pas pu vérifier… » : cliquez sur **OK**.
 4. Ouvrez **Réglages Système > Confidentialité et sécurité**, descendez tout en bas et cliquez sur **Ouvrir quand même** à côté de « Trackflight », puis confirmez.

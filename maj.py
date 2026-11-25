@@ -20,7 +20,7 @@ import chemins
 DEPOT = "Mobocrack/trackflight"
 API = f"https://api.github.com/repos/{DEPOT}/releases/latest"
 HOTES_OK = ("github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com")
-ETAT = {"actuelle": None, "derniere": None, "disponible": False, "url": None, "taille": 0,
+ETAT = {"actuelle": None, "derniere": None, "disponible": False, "url": None, "taille": 0, "fichier": None,
         "verifie": 0, "en_cours": False, "progression": 0, "erreur": None}
 
 
@@ -53,12 +53,15 @@ def _ctx():
         return ssl.create_default_context()
 
 
-def _fichier_voulu():
+def _fichiers_voulus():
+    """Fichiers acceptés, par ordre de préférence (un Mac à puce Apple peut utiliser la version Intel via Rosetta)."""
     if chemins.SYSTEME == "Windows":
-        return "Trackflight-Windows-Installation.exe"
+        return ["Trackflight-Windows-Installation.exe"]
     if chemins.SYSTEME == "Darwin":
-        return "Trackflight-Mac-Apple.dmg" if platform.machine() == "arm64" else "Trackflight-Mac-Intel.dmg"
-    return None
+        if platform.machine() == "arm64":
+            return ["Trackflight-Mac-Apple.dmg", "Trackflight-Mac-Intel.dmg"]
+        return ["Trackflight-Mac-Intel.dmg"]
+    return []
 
 
 def verifier(force=False):
@@ -71,8 +74,9 @@ def verifier(force=False):
         req = urllib.request.Request(API, headers={"Accept": "application/vnd.github+json", "User-Agent": "Trackflight"})
         with urllib.request.urlopen(req, timeout=15, context=_ctx()) as r:
             d = json.load(r)
-        nom = _fichier_voulu()
-        asset = next((a for a in d.get("assets", []) if a.get("name") == nom), None)
+        noms = {a.get("name"): a for a in d.get("assets", [])}
+        asset = next((noms[n] for n in _fichiers_voulus() if n in noms), None)
+        ETAT["fichier"] = asset["name"] if asset else None
         ETAT["derniere"] = d.get("tag_name", "").lstrip("v")
         ETAT["disponible"] = bool(asset) and _cle(ETAT["derniere"]) > _cle(ETAT["actuelle"])
         ETAT["url"] = asset["browser_download_url"] if asset else None
@@ -138,7 +142,7 @@ def installer():
     def job():
         try:
             dossier = tempfile.mkdtemp(prefix="trackflight-maj-")
-            fichier = os.path.join(dossier, _fichier_voulu())
+            fichier = os.path.join(dossier, ETAT["fichier"])
             _telecharger(ETAT["url"], fichier)
             if chemins.SYSTEME == "Windows":
                 _installer_windows(fichier)
