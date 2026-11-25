@@ -6,3 +6,6 @@ dmg/
 icones/
 __pycache__/
 *.pyc
+*.exe
+*.dmg
+*.zip
