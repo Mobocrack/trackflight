@@ -47,6 +47,24 @@ def etat_app():
             "installation": ETAT["installation"]}
 
 
+def journal_lisible(n=300):
+    """Dernières lignes de journal.log pour l'écran « Journal » des réglages.
+    Masque par précaution tout ce qui pourrait ressembler à une clé, et le dossier personnel."""
+    import re
+    try:
+        with open(os.path.join(releve.DONNEES, "journal.log"), "rb") as f:
+            f.seek(0, os.SEEK_END)
+            f.seek(max(0, f.tell() - 200_000))
+            texte = f.read().decode("utf-8", "replace")
+    except OSError:
+        return []
+    texte = re.sub(r"(api_key=)[^&\s\"']+", r"\1•••", texte)
+    texte = re.sub(r"\b[0-9A-Za-z]{40,}\b", "•••", texte)
+    texte = texte.replace(os.path.expanduser("~"), "~")
+    lignes = [l for l in texte.splitlines() if l.strip()]
+    return lignes[-n:]
+
+
 def nettoyer(p):
     p = P.completer(p)
     for k in ("adultes", "enfants", "bebes", "flex"):
@@ -110,6 +128,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
                              "programmee": installation.est_installee(), "app": etat_app(),
                              "theme": cfg["theme"], "version": maj.version(), "maj": maj.ETAT,
                              "systeme": chemins.SYSTEME, "accueil_vu": cfg["accueil_vu"]}})
+        if chemin == "/api/journal":
+            return self._envoyer(200, {"lignes": journal_lisible()})
         if chemin == "/api/statut":
             return self._envoyer(200, {"en_cours": releve_actif(), "progression": progression(), "app": etat_app(),
                                        "maj": maj.ETAT})

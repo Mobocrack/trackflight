@@ -1,5 +1,12 @@
 # Journal des versions
 
+## 1.2.3 (25/11/2026)
+
+- Nouveau : Réglages > Journal des recherches, affiché en temps réel (les plus récentes en haut, erreurs en rouge) avec un bouton « Copier ». Les clés et le dossier personnel y sont masqués.
+- Google Flights : la vraie raison d'un refus est gardée (par exemple « aéroport inconnu », « aucun résultat ») au lieu de « HTTP Error 400 », et affichée dans l'app.
+- Quand un voyage n'a aucun prix alors que d'autres en ont, l'app dit lequel et pourquoi.
+- Journal : une ligne par date interrogée sur Google Flights.
+
 ## 1.2.2 (25/11/2026)
 
 - Google Flights par une clé SerpApi gratuite : saisie simplifiée dans les réglages (boutons « Coller » et « Vérifier et enregistrer »), vérification de la clé sans consommer de recherche.

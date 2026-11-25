@@ -158,6 +158,20 @@ def _trajet_serpapi(segs, escales):
                                          for l in escales if l.get("duration")))
 
 
+ERREURS_GOOGLE = []  # raisons données par SerpApi pendant ce relevé (affichées dans l'app)
+
+
+def _raison_serpapi(e):
+    """SerpApi explique ses refus dans le corps de la réponse (JSON « error ») : on garde ce texte, pas seulement le code HTTP."""
+    import urllib.error
+    if isinstance(e, urllib.error.HTTPError):
+        try:
+            return json.loads(e.read().decode("utf-8", "replace")).get("error") or f"erreur HTTP {e.code}"
+        except (OSError, ValueError, AttributeError):
+            return f"erreur HTTP {e.code}"
+    return str(e)
+
+
 def relever_google(cfg, etat, p):
     if not (cfg["google_seul"] or "google" in cfg["sources"]) or not cfg["serpapi_cle"]:
         return []
@@ -174,11 +188,16 @@ def relever_google(cfg, etat, p):
             d = https_json("https://serpapi.com/search.json?" + urllib.parse.urlencode(P.params_serpapi(p, date, cfg["serpapi_cle"])))
             quota["n"] += 1
         except Exception as e:
-            log.error("[%s] SerpApi %s : %s", p["id"], date, e)
+            raison = _raison_serpapi(e)
+            log.error("[%s] Google Flights %s : %s", p["id"], date, raison)
+            ERREURS_GOOGLE.append(raison)
             continue
         if d.get("error"):
-            log.error("[%s] SerpApi %s : %s", p["id"], date, d["error"])
+            log.error("[%s] Google Flights %s : %s", p["id"], date, d["error"])
+            ERREURS_GOOGLE.append(d["error"])
             continue
+        log.info("[%s] Google Flights %s : %d vols lus", p["id"], date,
+                 len(d.get("best_flights", [])) + len(d.get("other_flights", [])))
         lien = d.get("search_metadata", {}).get("google_flights_url") or P.url_google(p, date)
         for f in d.get("best_flights", []) + d.get("other_flights", []):
             segs, esc = f.get("flights") or [], f.get("layovers") or []
@@ -303,12 +322,15 @@ def executer(projet=None, si_besoin=False):
             ecrire_json(os.path.join(DONNEES, "derniere_erreur.json"),
                         {"quand": maintenant, "message": f"Le navigateur de recherche n'a pas pu s'ouvrir ({str(e)[:200]})."})
             res, nav_ok = {p["id"]: [] for p in actifs}, False
-        total = 0
+        total, sans_prix = 0, []
         for p in actifs:
+            avant = len(ERREURS_GOOGLE)
             vols = res[p["id"]] + relever_google(cfg, etat, p)
             total += len(vols)
             if not vols:
                 log.error("[%s] aucun vol lu", p["id"])
+                raison = ERREURS_GOOGLE[-1] if len(ERREURS_GOOGLE) > avant else ""
+                sans_prix.append(f"{p.get('nom') or p['id']}" + (f" : « {raison[:160]} »" if raison else ""))
                 continue
             enregistrer(p, vols, maintenant)
             etat_p = lire_json(os.path.join(P.dossier(p), "etat.json"), {})
@@ -316,7 +338,9 @@ def executer(projet=None, si_besoin=False):
             ecrire_json(os.path.join(P.dossier(p), "etat.json"), etat_p)
             log.info("[%s] %d vols, %d alertes", p["id"], len(vols), len(n))
         if actifs and not total and nav_ok:
-            if cfg["google_seul"]:
+            if cfg["google_seul"] and ERREURS_GOOGLE:
+                message = f"Google Flights a répondu : « {ERREURS_GOOGLE[-1][:200]} ». Détail dans Réglages > Journal."
+            elif cfg["google_seul"]:
                 message = "Google Flights n’a renvoyé aucun prix. Vérifiez votre clé SerpApi, le quota et les dates du voyage."
             elif BLOQUES:
                 noms = " et ".join(NAVIGATEUR[k][0] for k in sorted(BLOQUES))
@@ -329,7 +353,11 @@ def executer(projet=None, si_besoin=False):
         if actifs and not total and cfg["notifications"]:
             notif.envoyer("Trackflight : recherche impossible",
                           "Ouvrez Trackflight pour voir le détail de la dernière recherche.")
-        if total:
+        if total and sans_prix:  # certains voyages ont des prix, d'autres non : on dit lesquels et pourquoi
+            ecrire_json(os.path.join(DONNEES, "derniere_erreur.json"),
+                        {"quand": maintenant, "message": "Aucun prix pour " + " ; ".join(sans_prix)
+                         + ". Détail dans Réglages > Journal."})
+        elif total:
             try:
                 os.remove(os.path.join(DONNEES, "derniere_erreur.json"))
             except OSError:

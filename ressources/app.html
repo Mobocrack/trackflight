@@ -356,6 +356,7 @@ dialog[open] .sheet{animation:feuille .42s var(--ease)}
 
 <dialog id="d-edit" class="bottom"><form class="sheet" id="f-edit" novalidate></form></dialog>
 <dialog id="d-reglages" class="bottom"><div class="sheet" id="s-reglages"></div></dialog>
+<dialog id="d-journal" class="bottom"><div class="sheet" id="s-journal"></div></dialog>
 <dialog id="d-confirm"><div class="alert" id="s-confirm"></div></dialog>
 <div class="wiz" id="wiz" hidden></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -881,6 +882,29 @@ async function sauver(liste){
 }
 
 /* ------------------------------------------------------------ réglages */
+/* ------------------------------------------------------------ journal (Réglages > Journal des recherches)
+   Dernières lignes de journal.log, les plus récentes en haut, actualisées toutes les 3 secondes tant que la fenêtre est ouverte. */
+let journalT;
+function journal(){
+  const d = $("#d-journal");
+  $("#s-journal").innerHTML = `<div class="sheet-head"><button class="btn link" id="j-copier">Copier</button><h3>Journal</h3><button class="btn link" style="font-weight:600" id="j-ok">OK</button></div>
+  <div class="sheet-body"><p class="foot-note" style="margin:0">Ce que Trackflight a fait lors des dernières recherches, en temps réel. En cas de souci, envoyez une photo ou une copie de cet écran.</p>
+  <pre id="j-texte" style="white-space:pre-wrap;word-break:break-word;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;background:var(--fill);border-radius:12px;padding:12px;margin:0;max-height:60vh;overflow:auto">Chargement…</pre></div>`;
+  let texte = "";
+  const classe = l => / ERROR | CRITICAL /.test(l) ? "var(--red)" : / WARNING /.test(l) ? "var(--orange)" : "var(--text)";
+  const charger = async () => {
+    const r = await api("/api/journal").catch(() => null); if (!r) return;
+    const lignes = r.lignes.slice().reverse();
+    texte = lignes.join("\n");
+    $("#j-texte").innerHTML = lignes.length ? lignes.map(l => `<span style="color:${classe(l)}">${esc(l)}</span>`).join("\n") : "Aucune recherche pour l'instant.";
+  };
+  $("#j-copier").onclick = async () => { try { await navigator.clipboard.writeText(texte); toast("Journal copié"); } catch (e) { toast("Copie impossible : faites une capture d'écran"); } };
+  $("#j-ok").onclick = () => d.close();
+  d.onclose = () => clearInterval(journalT);
+  charger(); clearInterval(journalT); journalT = setInterval(charger, 3000);
+  if (!d.open) d.showModal();
+}
+
 function reglages(){
   const R = D.reglages, a = R.app;
   $("#s-reglages").innerHTML = `<div class="sheet-head"><span></span><h3>Réglages</h3><button class="btn link" style="font-weight:600" id="r-ok">OK</button></div>
@@ -909,6 +933,7 @@ function reglages(){
     </div><p class="foot-note">Les mises à jour sont vérifiées au démarrage. Vos voyages sont conservés.</p></div>
     <div><div class="grp-title">Aide</div><div class="grp">
       <div class="cell"><span class="lab">Guide de démarrage</span><button class="btn link" id="r-tuto">Revoir le guide</button></div>
+      <div class="cell"><span class="lab">Journal des recherches</span><button class="btn link" id="r-journal">Afficher</button></div>
     </div></div>
     <div><div class="grp-title">Données</div><div class="grp">
       <div class="cell"><span class="lab">Dossier</span><span class="muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left">${esc(R.dossier)}</span></div>
@@ -923,6 +948,7 @@ function reglages(){
     if (m && m.disponible) { reglages(); dessinerPied(); } else { rv.textContent = m && m.erreur ? "Pas de connexion" : "Vous avez la dernière version"; } };
   $("#r-ouvrir").onclick = () => api("/api/ouvrir-reglages", {}).catch(e => toast(e.message));
   $("#r-tuto").onclick = () => { d.close(); tutoriel(); };
+  $("#r-journal").onclick = () => { d.close(); journal(); };
   $("#r-notif").onchange = async e => { await api("/api/reglages", {notifications: e.target.checked}); R.notifications = e.target.checked; };
   $("#r-test").onclick = async () => { try { await api("/api/test-notif", {}); toast("Notification envoyée"); } catch (e) { toast("Les notifications sont bloquées par le système"); } };
   const sauverSource = async opts => {
