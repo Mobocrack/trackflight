@@ -35,6 +35,7 @@ DEFAUT = {
     "accueil_vu": False,        # tutoriel de premier lancement déjà vu           # clair (par défaut), sombre ou auto (suit l'ordinateur)
     "serpapi_cle": "",          # clé gratuite sur serpapi.com (Google Flights), vide = Google ignoré
     "serpapi_max_mois": 120,
+    "google_seul": False,
 }
 COLONNES = ["releve", "source", "date", "compagnie", "depart", "arrivee", "aeroports", "duree_min", "escales", "via",
             "autonome", "prix", "date_retour", "retour_depart", "retour_arrivee", "retour_duree_min", "retour_escales",
@@ -70,12 +71,28 @@ def sauver_config(cfg):
 NAVIGATEUR = {"kayak": ("Kayak", P.url_kayak), "momondo": ("Momondo", P.url_momondo)}
 
 
+def sources_navigateur(cfg):
+    return [] if cfg["google_seul"] else [k for k in cfg["sources"] if k in NAVIGATEUR]
+
+
+BLOCAGE = ("pense que vous êtes un « robot »", "page que vous vouliez consulter est à l'usage exclusif des humains",
+           "Qu'est-ce qu'un robot ?")
+
+
+BLOQUES = set()  # sites qui ont affiché leur page anti-robot pendant ce relevé
+
+
+def bloque(page, texte):
+    """Le site a affiché sa page anti-robot : on s'arrête là pour ce site (aucun contournement, jamais)."""
+    return any(m in texte for m in BLOCAGE) or "robot" in (page.title() or "").lower()
+
+
 def relever_navigateur(cfg, liste):
-    from playwright.sync_api import sync_playwright
-    sources = [k for k in cfg["sources"] if k in NAVIGATEUR]
+    sources = sources_navigateur(cfg)
     res = {p["id"]: [] for p in liste}
     if not sources or not liste:
         return res
+    from playwright.sync_api import sync_playwright
     with sync_playwright() as pw:
         nav = navigateur.lancer(pw)
         ctx = nav.new_context(locale="fr-FR", viewport={"width": 1366, "height": 900})
@@ -85,6 +102,9 @@ def relever_navigateur(cfg, liste):
             for src in sources:
                 nom, url_de = NAVIGATEUR[src]
                 for date in P.dates_aller(p):
+                    if src in BLOQUES:
+                        fait += 1
+                        continue
                     page, url, retour = ctx.new_page(), url_de(p, date), P.retour_pour(p, date)
                     ecrire_json(PROGRESSION, {"projet": p["id"], "fait": fait, "total": total,
                                               "texte": f"{nom}, {P.date_txt(date, False)}"})
@@ -94,7 +114,13 @@ def relever_navigateur(cfg, liste):
                         vols, stable = [], 0
                         for _ in range(14):  # jusqu'à ~42 s : on attend que la liste se stabilise
                             page.wait_for_timeout(3000)
-                            n = lecteur.lire(page.inner_text("body"), date, retour)
+                            texte = page.inner_text("body")
+                            if bloque(page, texte):
+                                BLOQUES.add(src)
+                                log.warning("[%s] %s refuse la recherche automatique (page anti-robot) : site ignoré pour ce relevé",
+                                            p["id"], nom)
+                                break
+                            n = lecteur.lire(texte, date, retour)
                             stable = stable + 1 if n and len(n) == len(vols) else 0
                             vols = n
                             if stable >= 2:
@@ -133,7 +159,7 @@ def _trajet_serpapi(segs, escales):
 
 
 def relever_google(cfg, etat, p):
-    if "google" not in cfg["sources"] or not cfg.get("serpapi_cle"):
+    if not (cfg["google_seul"] or "google" in cfg["sources"]) or not cfg["serpapi_cle"]:
         return []
     mois = dt.date.today().strftime("%Y-%m")
     quota = etat.setdefault("serpapi", {})
@@ -268,7 +294,15 @@ def executer(projet=None, si_besoin=False):
         liste = P.charger()
         actifs = [p for p in liste if (p["id"] == projet if projet else p["actif"]) and not P.valider(p) and P.dates_aller(p)]
         maintenant = dt.datetime.now().strftime("%d/%m/%Y %H:%M")
-        res = relever_navigateur(cfg, actifs)
+        log.info("relevé lancé : %s", ", ".join(p["id"] for p in actifs) or "aucun voyage actif")
+        nav_ok = True
+        try:
+            res = relever_navigateur(cfg, actifs)
+        except Exception as e:  # navigateur introuvable ou impossible à ouvrir : on le dit au lieu de s'arrêter en silence
+            log.exception("relevé impossible : le navigateur de recherche n'a pas pu s'ouvrir")
+            ecrire_json(os.path.join(DONNEES, "derniere_erreur.json"),
+                        {"quand": maintenant, "message": f"Le navigateur de recherche n'a pas pu s'ouvrir ({str(e)[:200]})."})
+            res, nav_ok = {p["id"]: [] for p in actifs}, False
         total = 0
         for p in actifs:
             vols = res[p["id"]] + relever_google(cfg, etat, p)
@@ -281,9 +315,25 @@ def executer(projet=None, si_besoin=False):
             n = alertes(cfg, p, vols, etat_p)
             ecrire_json(os.path.join(P.dossier(p), "etat.json"), etat_p)
             log.info("[%s] %d vols, %d alertes", p["id"], len(vols), len(n))
+        if actifs and not total and nav_ok:
+            if cfg["google_seul"]:
+                message = "Google Flights n’a renvoyé aucun prix. Vérifiez votre clé SerpApi, le quota et les dates du voyage."
+            elif BLOQUES:
+                noms = " et ".join(NAVIGATEUR[k][0] for k in sorted(BLOQUES))
+                message = (f"{noms} refuse{'nt' if len(BLOQUES) > 1 else ''} la recherche automatique. "
+                           "Vous pouvez utiliser Google Flights via SerpApi dans les réglages.")
+            else:
+                message = "Aucun prix trouvé. Vérifiez les dates du voyage ou ouvrez un lien de recherche manuelle."
+            ecrire_json(os.path.join(DONNEES, "derniere_erreur.json"),
+                        {"quand": maintenant, "message": message})
         if actifs and not total and cfg["notifications"]:
             notif.envoyer("Trackflight : recherche impossible",
-                          "Aucun site n'a répondu. Vérifiez la connexion internet ; la recherche sera refaite demain.")
+                          "Ouvrez Trackflight pour voir le détail de la dernière recherche.")
+        if total:
+            try:
+                os.remove(os.path.join(DONNEES, "derniere_erreur.json"))
+            except OSError:
+                pass
         if not projet:
             etat["dernier_releve"] = time.time()
         ecrire_json(ETAT, etat)

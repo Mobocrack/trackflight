@@ -52,7 +52,11 @@ def main():
     if "--releve" in args:
         import releve
         projet = args[args.index("--projet") + 1] if "--projet" in args else None
-        releve.executer(projet=projet, si_besoin="--si-besoin" in args)
+        try:
+            releve.executer(projet=projet, si_besoin="--si-besoin" in args)
+        except Exception:  # sans console, une erreur non notée serait invisible
+            releve.log.exception("relevé interrompu par une erreur")
+            raise
     elif "--serveur" in args or "--sans-navigateur" in args:
         import serveur
         serveur.lancer(ouvrir=False)

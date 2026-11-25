@@ -296,6 +296,7 @@ dialog[open] .sheet{animation:feuille .42s var(--ease)}
 .date-grande:focus{border-bottom-color:var(--accent)}
 .rangee{display:flex;align-items:center;justify-content:space-between;gap:16px;background:var(--surface);box-shadow:var(--shadow);border-radius:16px;padding:16px 18px}
 .rangee b{font-size:17px;font-weight:600;display:block}
+.rangee small b{display:inline;font-size:inherit}
 .rangee small{color:var(--text-2)}
 .compteur{display:flex;align-items:center;gap:14px}
 .compteur button{width:40px;height:40px;border-radius:50%;border:0;background:var(--fill);font-size:22px;color:var(--text);display:grid;place-items:center}
@@ -432,7 +433,6 @@ async function voyage(id, frais=false){
   if (!id) return null;
   if (!frais && VOY[id] !== undefined) return VOY[id];
   try { VOY[id] = await api("/api/voyage/" + encodeURIComponent(id)); } catch (e) { VOY[id] = null; }
-  if (VOY[id] && VOY[id].vide) VOY[id] = null;
   return VOY[id];
 }
 
@@ -461,6 +461,10 @@ function dessinerPied(prog){
     html = `<span class="spin" style="color:var(--accent)"></span><div class="grow"><b>Mise à jour en cours…</b>Téléchargement ${D.reglages.maj.progression} %. Trackflight va se rouvrir tout seul.<div class="bar"><i style="width:${D.reglages.maj.progression}%"></i></div></div>`;
   } else if (D.reglages.maj && D.reglages.maj.disponible) {
     html = `<div class="grow"><b>Version ${esc(D.reglages.maj.derniere)} disponible</b>Nouveautés et corrections.</div><button class="btn primary" id="b-maj" style="padding:6px 12px;font-size:13px">Mettre à jour</button>`;
+  } else if (a.navigateur_requis && !a.navigateur_pret && a.navigateur_erreur && !a.navigateur_prepa) {
+    html = `<div class="grow"><b>Navigateur de recherche indisponible</b>Cliquez sur Rechercher pour réessayer, ou configurez Google Flights dans les réglages.</div><button class="btn" id="b-recherche-reglages">Réglages</button>`;
+  } else if (a.releve_erreur) {
+    html = `<div class="grow"><b>Dernière recherche sans résultat</b>${esc(a.releve_erreur.message)}</div><button class="btn" id="b-recherche-reglages">Réglages</button>`;
   } else if (a.navigateur_prepa) {
     html = `<span class="spin" style="color:var(--accent)"></span><div class="grow"><b>Préparation</b>Téléchargement du navigateur de recherche (une seule fois).</div>`;
   } else if (!D.reglages.programmee) {
@@ -470,6 +474,7 @@ function dessinerPied(prog){
   }
   $("#foot").innerHTML = html;
   const bm = $("#b-maj"); if (bm) bm.onclick = mettreAJour;
+  const br = $("#b-recherche-reglages"); if (br) br.onclick = reglages;
 }
 function mettreAJour(){
   confirmer(`Installer la version ${D.reglages.maj.derniere} ?`, "Trackflight va télécharger la mise à jour, se fermer, s'installer puis se rouvrir. Vos voyages sont conservés.", "Mettre à jour", async () => {
@@ -500,9 +505,10 @@ async function afficher(id, anime=true, ouvrirDetail=true){
   if (ouvrirDetail) $("#app").classList.add("detail");
   const v = await voyage(id);
   if (sel !== id) return;
-  main.innerHTML = `<div class="content${anime ? " fade" : ""}">${entete(p)}${v ? corps(p, v) : attente(p)}</div>`;
+  const resultats = v && !v.vide ? v : null;
+  main.innerHTML = `<div class="content${anime ? " fade" : ""}">${entete(p)}${resultats ? corps(p, resultats) : attente(p, v?.liens || [])}</div>`;
   main.scrollTop = 0;
-  brancher(p, v);
+  brancher(p, resultats);
 }
 function entete(p){
   const actif = enCours || D.statut.en_cours;
@@ -519,14 +525,17 @@ function entete(p){
     </div>
   </header>`;
 }
-function attente(p){
+function liensRecherche(liens){
+  return liens.map(([n,u]) => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(n)} ↗</a>`).join("");
+}
+function attente(p, liens){
   const actif = enCours || D.statut.en_cours, pr = D.statut.progression;
   const passe = p.date_aller < auj();
   return `<section class="waiting">
     <h3>${passe ? "Ce voyage est passé" : actif ? "Recherche en cours" : "Pas encore de prix"}</h3>
-    <p class="muted">${passe ? "Les dates sont passées : modifiez-les pour relancer le suivi." : actif ? "Kayak et Momondo sont consultés, comptez une à trois minutes par date." : "Lancez une première recherche, elle prend quelques minutes."}</p>
+    <p class="muted">${passe ? "Modifiez les dates pour relancer le suivi." : actif ? "Les prix s’afficheront à la fin de la recherche." : "Lancez une recherche ou consultez les comparateurs directement."}</p>
     ${actif ? `<div class="bar"><i style="width:${pr && pr.total ? Math.round(100*pr.fait/pr.total) : 5}%"></i></div>` : passe ? "" : '<button class="btn primary" id="b-chercher2">Rechercher maintenant</button>'}
-  </section>`;
+  </section>${!passe && liens.length ? `<section class="section"><h3>Recherche manuelle</h3><div class="pills">${liensRecherche(liens)}</div></section>` : ""}`;
 }
 const direct = v => v.escales === 0 && !(v.retour && v.retour.escales);
 const minBy = (a, f) => a.reduce((x, y) => f(y) < f(x) ? y : x);
@@ -591,7 +600,7 @@ function corps(p, V){
     ${H.length >= 2 ? `<section class="section"><h3>Évolution du prix</h3><div class="trend" id="trend"></div></section>` : ""}
     <section class="section">
       <h3>Vérifier sur les sites</h3>
-      <div class="pills">${V.liens.map(([n,u]) => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(n)} ↗</a>`).join("")}<a href="#" data-excel="${esc(p.id)}">Exporter en Excel</a></div>
+      <div class="pills">${liensRecherche(V.liens)}<a href="#" data-excel="${esc(p.id)}">Exporter en Excel</a></div>
       <p class="muted" style="margin-top:14px">Relevé du ${esc(V.releve.replace(" ", " à "))} sur ${esc(V.sources)}. Prix par personne, taxes comprises, bagage en soute pas toujours inclus.</p>
     </section>`;
 }
@@ -702,7 +711,8 @@ function suivre(){
       const avant = D.resumes[sel] && D.resumes[sel].meilleur;
       await charger();
       const apres = D.resumes[sel] && D.resumes[sel].meilleur;
-      toast(apres ? (avant && apres.prix < avant.prix ? `Bonne nouvelle : ${eur(apres.prix)}, en baisse` : "Prix mis à jour") : "Recherche terminée");
+      toast(s.app && s.app.releve_erreur ? s.app.releve_erreur.message
+        : apres ? (avant && apres.prix < avant.prix ? `Bonne nouvelle : ${eur(apres.prix)}, en baisse` : "Prix mis à jour") : "Recherche terminée");
     }
   }, 2500);
 }
@@ -885,11 +895,15 @@ function reglages(){
     </div></div>
     <div><div class="grp-title">Recherche automatique</div><div class="grp">
       <div class="cell"><span class="lab">Chaque jour à 9 h</span><span class="muted">${R.programmee ? "Activée" : "Inactive"}</span></div>
-      <div class="cell"><span class="lab">Navigateur de recherche</span><span class="muted">${a.navigateur_pret ? "Prêt" : a.navigateur_prepa ? "Téléchargement…" : "À préparer"}</span></div>
+      ${a.navigateur_requis ? `<div class="cell"><span class="lab">Navigateur de recherche</span><span class="muted">${a.navigateur_pret ? "Prêt" : a.navigateur_prepa ? "Téléchargement…" : a.navigateur_erreur ? "Échec du téléchargement" : "À préparer"}</span></div>` : ""}
     </div><p class="foot-note">${R.programmee ? "Si l'ordinateur est éteint à 9 h, la recherche se fait à son prochain démarrage." : esc(a.installation || "La programmation sera retentée au prochain lancement de l'application.")}</p></div>
     <div><div class="grp-title">Google Flights (facultatif)</div><div class="grp">
-      <div class="cell"><label for="r-cle">Clé SerpApi</label><input type="text" id="r-cle" placeholder="${R.serpapi ? "Enregistrée" : "Aucune"}" autocomplete="off" spellcheck="false"></div>
-    </div><p class="foot-note">Avec une clé gratuite de serpapi.com, Google Flights s'ajoute à Kayak et Momondo.${R.serpapi ? ' <a href="#" id="r-eff">Retirer la clé</a>' : ""}</p></div>
+      <div class="cell"><label for="r-cle">Clé Google Flights</label><input type="password" id="r-cle" placeholder="${R.serpapi ? "Enregistrée" : "Aucune"}" autocomplete="off" spellcheck="false"></div>
+      <div class="cell"><button class="btn link" id="r-coller">Coller</button><button class="btn link" id="r-verifier-cle">${R.serpapi ? "Vérifier la clé" : "Vérifier et enregistrer"}</button></div>
+      <div class="cell"><label class="toggle" style="color:var(--text);font-size:15px;justify-content:space-between;width:100%"><span>Utiliser seulement Google Flights</span><input type="checkbox" id="r-google-seul" ${R.google_seul ? "checked" : ""}><span class="switch"></span></label></div>
+    </div><p class="foot-note" id="r-cle-etat" role="status" hidden></p>
+    <p class="foot-note">La clé vient d'un compte gratuit SerpApi (250 recherches par mois) : <a href="https://serpapi.com/users/sign_up" target="_blank" rel="noopener">créer le compte</a>, puis <a href="https://serpapi.com/manage-api-key" target="_blank" rel="noopener">copier la clé</a>. Elle reste sur cet ordinateur. Si Kayak et Momondo bloquent la recherche, activez « Utiliser seulement Google Flights ».${R.serpapi ? ' <a href="#" id="r-eff">Retirer la clé</a>' : ""}</p>
+    <p class="foot-note" id="r-source-erreur" role="alert" style="color:var(--red)" hidden></p></div>
     <div><div class="grp-title">Version</div><div class="grp">
       <div class="cell"><span class="lab">Trackflight ${esc(R.version)}</span><span id="r-maj-etat">${R.maj && R.maj.disponible ? `<button class="btn primary" id="r-maj" style="padding:6px 12px">Installer la ${esc(R.maj.derniere)}</button>` : '<button class="btn link" id="r-verif">Rechercher une mise à jour</button>'}</span></div>
     </div><p class="foot-note">Les mises à jour sont vérifiées au démarrage. Vos voyages sont conservés.</p></div>
@@ -898,7 +912,7 @@ function reglages(){
     </div></div>
     <div><div class="grp-title">Données</div><div class="grp">
       <div class="cell"><span class="lab">Dossier</span><span class="muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left">${esc(R.dossier)}</span></div>
-    </div><p class="foot-note">Vos voyages et l'historique des prix restent sur cet ordinateur. Rien n'est envoyé ailleurs.</p></div>
+    </div><p class="foot-note">Vos voyages et l’historique des prix sont enregistrés sur cet ordinateur. Les critères de recherche sont transmis aux sources consultées.</p></div>
   </div>`;
   const d = $("#d-reglages");
   $("#r-theme").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === R.theme));
@@ -911,8 +925,47 @@ function reglages(){
   $("#r-tuto").onclick = () => { d.close(); tutoriel(); };
   $("#r-notif").onchange = async e => { await api("/api/reglages", {notifications: e.target.checked}); R.notifications = e.target.checked; };
   $("#r-test").onclick = async () => { try { await api("/api/test-notif", {}); toast("Notification envoyée"); } catch (e) { toast("Les notifications sont bloquées par le système"); } };
-  const eff = $("#r-eff"); if (eff) eff.onclick = async e => { e.preventDefault(); await api("/api/reglages", {effacer_serpapi: true}); R.serpapi = false; reglages(); toast("Clé retirée"); };
-  $("#r-ok").onclick = async () => { const c = $("#r-cle").value.trim(); if (c) { const r = await api("/api/reglages", {serpapi_cle: c}); R.serpapi = r.serpapi; toast("Clé enregistrée"); } d.close(); };
+  const sauverSource = async opts => {
+    const r = await api("/api/reglages", opts);
+    Object.assign(R, {serpapi: r.serpapi, google_seul: r.google_seul, app: r.app});
+    dessinerPied();
+  };
+  const afficherErreurSource = err => {
+    const message = $("#r-source-erreur");
+    message.textContent = err.message;
+    message.hidden = false;
+  };
+  const etatCle = (texte, ok) => { const m = $("#r-cle-etat"); m.textContent = texte; m.style.color = ok ? "var(--green)" : "var(--red)"; m.hidden = false; };
+  $("#r-coller").onclick = async () => {
+    try { $("#r-cle").value = (await navigator.clipboard.readText()).trim(); etatCle("Clé collée. Cliquez sur « Vérifier et enregistrer ».", true); }
+    catch (e) { $("#r-cle").focus(); etatCle(`Collez la clé avec ${/Mac/.test(navigator.platform) ? "Cmd" : "Ctrl"} + V dans le champ.`, false); }
+  };
+  $("#r-verifier-cle").onclick = async () => {
+    const b = $("#r-verifier-cle"); b.disabled = true; b.textContent = "Vérification…";
+    try {
+      const r = await api("/api/verifier-cle", {cle: $("#r-cle").value.trim()});
+      R.serpapi = true; R.google_seul = r.google_seul; R.app = r.app; $("#r-cle").value = ""; $("#r-cle").placeholder = "Enregistrée";
+      $("#r-google-seul").checked = r.google_seul;
+      etatCle("Clé valide et enregistrée" + (r.restant != null ? ` : ${r.restant} recherches restantes ce mois-ci.` : "."), true);
+      dessinerPied();
+    } catch (err) { etatCle(err.message, false); }
+    finally { b.disabled = false; b.textContent = R.serpapi ? "Vérifier la clé" : "Vérifier et enregistrer"; }
+  };
+  const eff = $("#r-eff"); if (eff) eff.onclick = async e => {
+    e.preventDefault();
+    try { await sauverSource({effacer_serpapi: true}); reglages(); toast("Clé retirée"); }
+    catch (err) { afficherErreurSource(err); }
+  };
+  $("#r-ok").onclick = async () => {
+    const cle = $("#r-cle").value.trim(), google_seul = $("#r-google-seul").checked;
+    try {
+      if (cle || google_seul !== R.google_seul) {
+        await sauverSource({serpapi_cle: cle, google_seul});
+        toast("Source de recherche enregistrée");
+      }
+      d.close();
+    } catch (err) { afficherErreurSource(err); }
+  };
   if (!d.open) d.showModal();
 }
 
@@ -1167,9 +1220,9 @@ document.addEventListener("keydown", e => {
 function tutoriel(){
   const R = D.reglages, mac = R.systeme === "Darwin";
   const etapes = [
-    () => `<h2>Bienvenue dans Trackflight</h2><p class="aide">Trackflight surveille le prix de vos vols et vous prévient quand il baisse. En trois minutes, tout est prêt.</p>
+    () => `<h2>Bienvenue dans Trackflight</h2><p class="aide">Trackflight surveille le prix de vos vols et vous prévient quand il baisse. En trois minutes, tout est prêt. <span class="muted">Version ${esc(R.version)}</span></p>
       <div class="rangee"><div><b>Vos voyages</b><small>Villes, dates, voyageurs, escales : vous choisissez vos critères.</small></div></div>
-      <div class="rangee"><div><b>Chaque jour</b><small>Kayak et Momondo sont comparés automatiquement, même si l'app est fermée.</small></div></div>
+      <div class="rangee"><div><b>Chaque jour</b><small>Les prix sont comparés automatiquement (Kayak, Momondo, Google Flights), même si l'app est fermée.</small></div></div>
       <div class="rangee"><div><b>Une notification</b><small>Dès qu'un prix passe sous le seuil que vous avez choisi.</small></div></div>`,
     () => `<h2>Recevoir les alertes</h2><p class="aide">Trackflight vous prévient par une notification de l'ordinateur. Vérifions qu'elle arrive bien.</p>
       <button class="btn primary" id="t-notif" style="align-self:flex-start;font-size:16px;padding:11px 20px">Envoyer une notification de test</button>
@@ -1186,7 +1239,8 @@ function tutoriel(){
       const ok = R.programmee, a = R.app;
       return `<h2>Les prix se mettent à jour tout seuls</h2><p class="aide">Chaque jour à 9 h, Trackflight compare les prix de vos voyages. Si l'ordinateur était éteint, il le fait au démarrage suivant. Pas besoin d'ouvrir l'app.</p>
       <div class="rangee"><div><b>${ok ? "Recherche automatique activée" : "Recherche automatique pas encore active"}</b><small>${ok ? "Tout est en place." : esc(a.installation || "Elle sera activée au prochain lancement de Trackflight.")}</small></div><span class="chip ${ok ? "green" : "orange"}">${ok ? "Activée" : "À vérifier"}</span></div>
-      ${mac ? `<div class="rangee"><div><b>Navigateur de recherche</b><small>${a.navigateur_pret ? "Prêt." : "Téléchargement en cours (environ 150 Mo, une seule fois). Vous pouvez continuer."}</small></div><span class="chip ${a.navigateur_pret ? "green" : "orange"}">${a.navigateur_pret ? "Prêt" : "En cours"}</span></div>` : ""}
+      ${mac && a.navigateur_requis ? `<div class="rangee"><div><b>Navigateur de recherche</b><small>${a.navigateur_pret ? "Prêt." : a.navigateur_erreur && !a.navigateur_prepa ? "Le téléchargement a échoué. Vous pouvez réessayer ou configurer Google Flights dans les réglages." : "Trackflight prépare le navigateur au premier lancement."}</small></div><span class="chip ${a.navigateur_pret ? "green" : "orange"}">${a.navigateur_pret ? "Prêt" : a.navigateur_erreur && !a.navigateur_prepa ? "Échec" : "À préparer"}</span></div>` : ""}
+      <div class="rangee"><div><b>Google Flights</b><small>${R.serpapi ? "Clé enregistrée : les prix Google Flights sont inclus." : mac ? "Sur Mac, ajoutez une clé Google Flights dans les <b>Réglages</b> : c'est elle qui fournit les prix." : "Facultatif : ajoutez une clé Google Flights dans les <b>Réglages</b> pour plus de prix."}</small></div><span class="chip ${R.serpapi ? "green" : "orange"}">${R.serpapi ? "Prête" : "À ajouter"}</span></div>
       <p class="aide">L'ordinateur doit être allumé et connecté à internet au moment de la recherche.</p>`;
     },
     () => {

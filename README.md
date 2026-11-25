@@ -3,7 +3,7 @@
 Application pour Windows et Mac qui suit le prix de vos voyages en avion et vous prévient quand il baisse.
 
 - Vos voyages : villes, dates (aller simple ou aller-retour, à quelques jours près), voyageurs, classe, escales, durée maximale.
-- Chaque jour à 9 h (ou au démarrage de l'ordinateur), les prix sont relevés sur Kayak et Momondo, et sur Google Flights si vous ajoutez une clé gratuite [SerpApi](https://serpapi.com).
+- Chaque jour à 9 h (ou au démarrage de l'ordinateur), les prix sont relevés sur Kayak et Momondo (Windows), et sur Google Flights avec une clé gratuite [SerpApi](https://serpapi.com) (indispensable sur Mac, où Kayak et Momondo refusent la recherche automatique).
 - Une notification de l'ordinateur signale les bons prix.
 - Tout reste sur votre ordinateur : aucun compte, aucun serveur.
 
@@ -24,7 +24,7 @@ Rendez-vous dans les **[versions publiées](../../releases/latest)** : le mode d
 
 Les données de l'utilisateur sont dans `%LOCALAPPDATA%\Trackflight` (Windows) ou `~/Library/Application Support/Trackflight` (Mac).
 
-Les comparateurs sont consultés comme le ferait une personne, à un rythme modéré, sans contournement de leurs protections. Les sites qui refusent les navigateurs automatisés (Skyscanner, Expedia, Google Flights en direct) ne sont pas interrogés.
+Les comparateurs sont consultés à un rythme modéré, sans aucun contournement de leurs protections : si un site affiche sa page anti-robot, la recherche s'arrête pour ce site. Les sites qui refusent les navigateurs automatisés (Skyscanner, Expedia, Google Flights en direct) ne sont pas interrogés.
 
 ## Fabriquer
 
@@ -35,3 +35,5 @@ pyinstaller Trackflight.spec --noconfirm
 ```
 
 Les versions Windows et Mac sont fabriquées par GitHub Actions (`.github/workflows/fabrication.yml`) à chaque étiquette `vX.Y.Z`.
+
+Historique des versions : [CHANGELOG.md](CHANGELOG.md). La clé SerpApi de chacun reste dans ses réglages locaux, jamais dans ce dépôt.
