@@ -237,7 +237,8 @@ def url_google(p, date):
     return f"https://www.google.com/travel/flights/search?tfs={tfs}&hl=fr&gl=FR&curr=EUR"
 
 
-def params_serpapi(p, date, cle):
+def params_serpapi(p, date, cle, jeton_retour=None):
+    """jeton_retour : « departure_token » d'un vol aller, pour obtenir les vols retour qui vont avec."""
     r = retour_pour(p, date)
     q = dict(engine="google_flights",
              departure_id=p["origine"]["aeroports"] or p["origine"]["code"],
@@ -248,6 +249,8 @@ def params_serpapi(p, date, cle):
              stops={"tous": "0", "direct": "1", "1": "2"}[p["escales"]], api_key=cle)
     if r:
         q["return_date"] = r
+    if jeton_retour:
+        q["departure_token"] = jeton_retour
     return q
 
 

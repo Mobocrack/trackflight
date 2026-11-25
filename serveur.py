@@ -324,6 +324,19 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._envoyer(200, {"ok": True, "serpapi": True, "google_seul": cfg["google_seul"], "offre": compte.get("plan_name") or "",
                                        "restant": restant(compte), "app": etat_app()})
 
+        if chemin == "/api/retour":
+            p = next((x for x in P.charger() if x["id"] == corps.get("id")), None)
+            if not p or p["type"] != "ar" or not corps.get("jeton") or not corps.get("date"):
+                return self._envoyer(400, {"erreur": "Vol introuvable."})
+            if releve_actif():
+                return self._envoyer(409, {"erreur": "Une recherche est en cours, réessayez dans un instant."})
+            try:
+                with VERROU:
+                    retours = releve.retour_a_la_demande(p, str(corps["date"]), str(corps["jeton"]))
+            except RuntimeError as e:
+                return self._envoyer(502, {"erreur": f"Google Flights : {e}"})
+            return self._envoyer(200, {"ok": True, "n": len(retours)})
+
         if chemin.startswith("/api/coffre/"):
             return self._coffre(chemin[len("/api/coffre/"):], corps)
 

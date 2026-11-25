@@ -161,6 +161,83 @@ def _trajet_serpapi(segs, escales):
                                          for l in escales if l.get("duration")))
 
 
+def _vol_google(f, date, n_pass):
+    """Un vol de la réponse Google Flights (aller, ou retour avec departure_token). None s'il est incomplet."""
+    segs, esc = f.get("flights") or [], f.get("layovers") or []
+    if not segs or not f.get("price"):
+        return None
+    cies = []
+    for sg in segs:
+        if sg.get("airline") and sg["airline"] not in cies:
+            cies.append(sg["airline"])
+    brut = json.dumps(f).lower()
+    logo = f.get("airline_logo") or next((sg.get("airline_logo") for sg in segs if sg.get("airline_logo")), "")
+    total = int(f["price"])
+    return dict(date=date, compagnie=", ".join(cies), **_trajet_serpapi(segs, esc),
+                duree=int(f.get("total_duration", 0)), prix=round(total / n_pass), prix_total=total,
+                autonome="self_transfer" in brut or "self-transfer" in brut,
+                logo=logo if str(logo).startswith("https://www.gstatic.com/") else "",
+                jeton_retour=f.get("departure_token") or "")
+
+
+RETOUR_CHAMPS = ("date", "compagnie", "depart", "arrivee", "aeroports", "escales", "via", "escale_detail", "duree", "logo")
+
+
+def retours_google(cle, p, date, jeton):
+    """Vols retour proposés avec un vol aller donné (1 recherche). Triés du moins cher au plus cher ;
+    leur prix est le total aller-retour. Lève une exception (message de SerpApi) en cas d'échec."""
+    n_pass, date_retour = P.nb_passagers(p), P.retour_pour(p, date)
+    try:
+        d = https_json("https://serpapi.com/search.json?" + urllib.parse.urlencode(P.params_serpapi(p, date, cle, jeton)))
+    except Exception as e:
+        raise RuntimeError(_raison_serpapi(e))
+    if d.get("error"):
+        raise RuntimeError(d["error"])
+    out = [v for v in (_vol_google(f, date_retour, n_pass) for f in d.get("best_flights", []) + d.get("other_flights", [])) if v]
+    out.sort(key=lambda v: v["prix_total"])
+    return out
+
+
+def appliquer_retour(v, retours, p):
+    """Le vol aller reçoit son meilleur retour (et le prix aller-retour réel) ; les autres retours sont gardés pour l'affichage."""
+    ok = [r for r in retours if P.garde(p, dict(v, retour=dict(r, autonome=False)))] or retours
+    if not ok:
+        return
+    best = ok[0]
+    v["retour"] = {k: best[k] for k in RETOUR_CHAMPS}
+    v["prix_total"], v["prix"] = best["prix_total"], best["prix"]
+    v["autonome"] = v["autonome"] or best["autonome"]
+    v["retours"] = [dict({k: r[k] for k in RETOUR_CHAMPS}, prix=r["prix"], prix_total=r["prix_total"],
+                         ok=P.garde(p, dict(v, retour=dict(r, autonome=False)))) for r in retours[:6]]
+
+
+def retour_a_la_demande(p, date, jeton):
+    """Bouton « Voir le vol retour » : une recherche pour ce vol aller, comptée dans le quota de la clé,
+    puis le résultat est enregistré dans derniers.json. Renvoie la liste des retours."""
+    cfg = config()
+    if not cfg["serpapi_cle"]:
+        raise RuntimeError("Ajoutez une clé Google Flights dans les réglages.")
+    etat = lire_json(ETAT, {})
+    mois = dt.date.today().strftime("%Y-%m")
+    quota = etat.setdefault("serpapi_cles", {}).setdefault(hashlib.sha256(cfg["serpapi_cle"].encode()).hexdigest()[:12], {})
+    if quota.get("mois") != mois:
+        quota.update(mois=mois, n=0)
+    if quota["n"] >= cfg["serpapi_max_mois"]:
+        raise RuntimeError("Limite mensuelle de recherches atteinte pour cette clé.")
+    retours = retours_google(cfg["serpapi_cle"], p, date, jeton)
+    quota["n"] += 1
+    ecrire_json(ETAT, etat)
+    chemin = os.path.join(P.dossier(p), "derniers.json")
+    d = lire_json(chemin, None)
+    if d:
+        for v in d["vols"]:
+            if v.get("jeton_retour") == jeton:
+                appliquer_retour(v, retours, p)
+        ecrire_json(chemin, d)
+    log.info("[%s] Google Flights retour à la demande %s : %d retours", p["id"], date, len(retours))
+    return retours
+
+
 ERREURS_GOOGLE = []  # raisons données par SerpApi pendant ce relevé (affichées dans l'app)
 
 
@@ -242,21 +319,31 @@ def relever_google(cfg, etat, p):
             reperes[date] = {k: pi.get(k) for k in ("lowest_price", "price_level", "typical_price_range", "price_history")}
         lien = d.get("search_metadata", {}).get("google_flights_url") or P.url_google(p, date)
         for f in d.get("best_flights", []) + d.get("other_flights", []):
-            segs, esc = f.get("flights") or [], f.get("layovers") or []
-            if not segs or not f.get("price"):
+            v = _vol_google(f, date, n_pass)
+            if v:
+                tous.append(dict(v, retour=None, source="Google Flights", lien=lien))
+    # Aller-retour : détail du vol retour pour les meilleures offres seulement (1 recherche chacune).
+    # On s'arrête après 3 offres qui respectent tous les critères, ou 5 recherches.
+    if p["type"] == "ar" and tous:
+        candidats = sorted((v for v in tous if v["jeton_retour"] and P.garde(p, v)), key=lambda v: v["prix"])
+        valides, essais = 0, 0
+        for v in candidats:
+            if valides >= 3 or essais >= 5 or quota["n"] >= cfg["serpapi_max_mois"]:
+                break
+            essais += 1
+            try:
+                retours = retours_google(cfg["serpapi_cle"], p, v["date"], v["jeton_retour"])
+                quota["n"] += 1
+            except RuntimeError as e:
+                log.error("[%s] Google Flights retour %s : %s", p["id"], v["date"], e)
+                if epuisee(None, str(e)):
+                    signaler_cle_epuisee(cfg, str(e))
+                    break
                 continue
-            cies = []
-            for sg in segs:
-                if sg.get("airline") and sg["airline"] not in cies:
-                    cies.append(sg["airline"])
-            brut = json.dumps(f).lower()
-            logo = f.get("airline_logo") or next((sg.get("airline_logo") for sg in segs if sg.get("airline_logo")), "")
-            total = int(f["price"])
-            tous.append(dict(date=date, compagnie=", ".join(cies), **_trajet_serpapi(segs, esc),
-                             duree=int(f.get("total_duration", 0)), prix=round(total / n_pass), prix_total=total,
-                             autonome="self_transfer" in brut or "self-transfer" in brut, retour=None,
-                             source="Google Flights", lien=lien,
-                             logo=logo if str(logo).startswith("https://www.gstatic.com/") else ""))
+            appliquer_retour(v, retours, p)
+            if v.get("retour") and P.garde(p, v):
+                valides += 1
+        log.info("[%s] Google Flights : vol retour détaillé pour %d offres (%d recherches)", p["id"], valides, essais)
     if reperes:
         ecrire_json(os.path.join(P.dossier(p), "google_repere.json"),
                     {"maj": dt.datetime.now().strftime("%d/%m/%Y %H:%M"), "passagers": n_pass, "dates": reperes})

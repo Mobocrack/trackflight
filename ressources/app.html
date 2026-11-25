@@ -159,6 +159,10 @@ select.plain{border:0;background:var(--fill);border-radius:8px;padding:6px 10px;
 .r-price{text-align:right;font:600 17px var(--font-display);letter-spacing:-.01em}
 .r-price small{display:block;font:400 11.5px var(--font);color:var(--text-2)}
 .row-more{display:none;padding:0 18px 14px;gap:8px;flex-wrap:wrap}
+.retour-dem{flex-basis:100%;display:flex;flex-direction:column;gap:6px;margin-top:6px;font-size:13.5px}
+.retour-opt{display:grid;grid-template-columns:minmax(120px,1fr) 2fr auto;gap:10px;align-items:center;padding:6px 10px;border-radius:10px;background:var(--fill)}
+.retour-opt.retenu{outline:2px solid var(--accent)}
+.retour-opt.hors{opacity:.55}
 .row.open .row-more{display:flex}
 .offer{display:flex;gap:14px;align-items:center;justify-content:space-between;border-radius:10px;background:var(--fill-2);padding:9px 12px;font-size:13.5px;color:var(--text);min-width:200px;flex:1}
 .offer b{font-weight:600}
@@ -563,6 +567,7 @@ function badges(v, ligne=false){
   return [direct(v) && !ligne ? '<span class="chip green">Direct</span>' : "",
     v.depart < "05:00" ? '<span class="chip orange">Part la nuit précédente</span>' : "",
     v.autonome ? '<span class="chip orange">Billets séparés</span>' : "",
+    v.jeton_retour && !v.retour ? `<span class="chip" title="Le vol retour n'a pas encore été détaillé : ouvrez la ligne pour le voir (durée et escales du retour non vérifiées).">Retour à voir</span>` : "",
     ...(v.formalites || []).map(f => `<span class="chip orange" title="${esc(f.long)}. Pour un passeport français ; vérifiez sur le site officiel avant de réserver.">${esc(ligne ? f.court : f.long)}</span>`)].join("");
 }
 /* Repère de Google Flights : le prix est-il bas, normal ou élevé pour ce trajet, et comment a-t-il évolué ces dernières semaines.
@@ -614,8 +619,8 @@ function corps(p, V){
       <div class="hero-flight">
         ${c.retour ? `<span class="leg-title">Aller · ${esc(jour(c.date,{weekday:"long",day:"numeric",month:"long"}))}</span>` : `<span class="leg-title">${esc(jour(c.date,{weekday:"long",day:"numeric",month:"long"}))}</span>`}
         ${legHTML(c)}
-        ${c.retour ? `<span class="leg-title">Retour · ${esc(jour(c.retour.date,{weekday:"long",day:"numeric",month:"long"}))}</span>${legHTML(c.retour)}` : ""}
-        <div class="chips"><span class="chip">${logo(c)}${esc(c.compagnie)}</span>${c.escale_detail ? `<span class="chip">Escale ${esc(c.escale_detail)}</span>` : ""}${badges(c)}</div>
+        ${c.retour ? `<span class="leg-title">Retour · ${esc(jour(c.retour.date,{weekday:"long",day:"numeric",month:"long"}))}</span>${legHTML(c.retour)}` : c.jeton_retour ? `<button class="btn" style="align-self:flex-start" data-retour data-id="${esc(p.id)}" data-date="${esc(c.date)}" data-jeton="${esc(c.jeton_retour)}">Voir le vol retour</button>` : ""}
+        <div class="chips"><span class="chip">${logo(c)}${esc(c.compagnie)}</span>${c.retour && c.retour.compagnie !== c.compagnie ? `<span class="chip">${logo(c.retour)}Retour : ${esc(c.retour.compagnie)}</span>` : ""}${c.escale_detail ? `<span class="chip">Escale ${esc(c.escale_detail)}</span>` : ""}${badges(c)}</div>
       </div>
     </section>`;
     const val = v => v.prix + ((v.duree + (v.retour ? v.retour.duree : 0)) / 60) * 25;
@@ -659,9 +664,24 @@ function ligneVol(v, i, p){
       <span class="r-info"><b>${logo(v)}${esc(v.compagnie)}</b><span>${esc(jour(v.date))} · ${v.escales ? `${v.escales} escale${v.escales>1?"s":""} à ${esc(v.via)}` : "direct"}${r ? ` · retour ${r.escales ? "via " + esc(r.via) : "direct"}` : ""}</span> <span class="chips" style="display:inline-flex;margin-left:4px">${badges(v, true)}</span></span>
       <span class="r-price">${eur(v.prix)}${n > 1 ? `<small>${eur(v.prix_total)} au total</small>` : ""}</span>
     </button>
-    <div class="row-more">${obs.map((o, k) => `<a class="offer${k === 0 && obs.length > 1 ? " best" : ""}" href="${esc(o.lien)}" target="_blank" rel="noopener"><span>${esc(o.source)} ↗</span><b>${eur(o.prix)}</b></a>`).join("")}</div>
+    <div class="row-more">${obs.map((o, k) => `<a class="offer${k === 0 && obs.length > 1 ? " best" : ""}" href="${esc(o.lien)}" target="_blank" rel="noopener"><span>${esc(o.source)} ↗</span><b>${eur(o.prix)}</b></a>`).join("")}${retourHTML(v, p)}</div>
   </div>`;
 }
+/* Aller-retour : le détail du vol retour (automatique pour les meilleures offres, sinon à la demande : 1 recherche). */
+function retourHTML(v, p){
+  if (!v.jeton_retour) return "";
+  if (!v.retour) return `<div class="retour-dem"><button class="btn" data-retour data-id="${esc(p ? p.id : "")}" data-date="${esc(v.date)}" data-jeton="${esc(v.jeton_retour)}">Voir le vol retour</button><span class="muted">Une recherche Google Flights (1 crédit de la clé).</span></div>`;
+  const autres = (v.retours || []).slice(0, 5);
+  return `<div class="retour-dem"><b>Retours possibles avec cet aller</b>${autres.map(x => `<div class="retour-opt${x.depart === v.retour.depart && x.compagnie === v.retour.compagnie ? " retenu" : x.ok === false ? " hors" : ""}">
+    <span>${logo(x)}${esc(x.compagnie)}</span><span>${esc(jour(x.date))} · ${tempsHTML(x.depart)} → ${tempsHTML(x.arrivee)} · ${dur(x.duree)} · ${x.escales ? "via " + esc(x.via) : "direct"}${x.ok === false ? " · hors critères" : ""}</span><b>${eur(x.prix)}</b></div>`).join("")}
+    <span class="muted">Prix aller-retour par personne. Le vol retour affiché est le moins cher qui respecte vos critères.</span></div>`;
+}
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-retour]"); if (!b) return;
+  e.stopPropagation(); b.disabled = true; b.textContent = "Recherche du vol retour…";
+  try { await api("/api/retour", {id: b.dataset.id, date: b.dataset.date, jeton: b.dataset.jeton}); delete VOY[b.dataset.id]; await afficher(b.dataset.id, false); toast("Vol retour ajouté"); }
+  catch (err) { b.disabled = false; b.textContent = "Voir le vol retour"; toast(err.message); }
+});
 function dessinerVols(p, V){
   const f = FILTRE[p.id];
   const r = V.vols.filter(v => (f.date === "tous" || v.date === f.date) && (f.hors || v.ok) && (!f.direct || direct(v)));

@@ -144,7 +144,7 @@ def donnees_voyage(p):
         return None
     champs = ("date", "compagnie", "depart", "arrivee", "aeroports", "duree", "escales", "via", "escale_detail",
               "prix", "prix_total", "prix_max", "source", "lien", "site", "autonome", "ok", "retour", "obs",
-              "formalites", "logo")
+              "formalites", "logo", "jeton_retour", "retours")
     vols = consolider(p, d["vols"])
     return {"projet": _projet_public(p), "releve": d["releve"], "sources": d.get("sources", "Kayak"),
             "histo": historique(p), "vols": [{k: v.get(k) for k in champs} for v in vols], "liens": P.liens(p),

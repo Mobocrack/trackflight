@@ -1,5 +1,13 @@
 # Journal des versions
 
+## 1.3.3 (25/11/2026)
+
+- Aller-retour : le vol retour est maintenant connu. Pour les meilleures offres (jusqu'à 3 qui respectent tous les critères, 5 recherches au plus), l'app récupère automatiquement les vols retour sur Google Flights et retient le moins cher qui respecte les critères. Le prix affiché devient le vrai prix aller-retour.
+- Les critères (durée maximale, escales) sont vérifiés à l'aller ET au retour : un retour trop long n'est plus classé « meilleur prix » par erreur.
+- Pour les autres vols : bouton « Voir le vol retour » (une recherche, 1 crédit de la clé), et badge « Retour à voir » tant que le retour n'est pas détaillé.
+- Détail d'un vol : liste des retours possibles avec leur prix ; ceux qui ne respectent pas les critères sont grisés.
+- Les badges ESTA, AVE et ETA tiennent compte des escales du retour ; la carte du meilleur prix indique la compagnie du retour.
+
 ## 1.3.2 (25/11/2026)
 
 - Correctif : la 1.3.0 ne démarrait pas sur les Mac Intel (erreur « Symbol not found: _SSL_get0_group_name »). La bibliothèque « cryptography » n'est plus publiée prête à l'emploi pour Mac Intel : recompilée par GitHub contre une version d'OpenSSL plus récente que celle livrée avec l'app, elle plantait au démarrage. Le coffre utilise désormais PyCryptodome (même chiffrement AES-256-GCM et scrypt, autonome, sans OpenSSL) ; un coffre créé avec la 1.3.0 reste lisible.
