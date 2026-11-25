@@ -179,7 +179,7 @@ def relever_google(cfg, etat, p):
     quota = etat.setdefault("serpapi", {})
     if quota.get("mois") != mois:
         quota.update(mois=mois, n=0)
-    tous, n_pass = [], P.nb_passagers(p)
+    tous, n_pass, reperes = [], P.nb_passagers(p), {}
     for date in P.dates_aller(p):
         if quota["n"] >= cfg["serpapi_max_mois"]:
             log.warning("SerpApi : quota mensuel atteint (%s)", quota["n"])
@@ -198,6 +198,9 @@ def relever_google(cfg, etat, p):
             continue
         log.info("[%s] Google Flights %s : %d vols lus", p["id"], date,
                  len(d.get("best_flights", [])) + len(d.get("other_flights", [])))
+        if isinstance(d.get("price_insights"), dict):  # repère de Google : niveau du prix, fourchette habituelle, historique récent
+            pi = d["price_insights"]
+            reperes[date] = {k: pi.get(k) for k in ("lowest_price", "price_level", "typical_price_range", "price_history")}
         lien = d.get("search_metadata", {}).get("google_flights_url") or P.url_google(p, date)
         for f in d.get("best_flights", []) + d.get("other_flights", []):
             segs, esc = f.get("flights") or [], f.get("layovers") or []
@@ -213,6 +216,9 @@ def relever_google(cfg, etat, p):
                              duree=int(f.get("total_duration", 0)), prix=round(total / n_pass), prix_total=total,
                              autonome="self_transfer" in brut or "self-transfer" in brut, retour=None,
                              source="Google Flights", lien=lien))
+    if reperes:
+        ecrire_json(os.path.join(P.dossier(p), "google_repere.json"),
+                    {"maj": dt.datetime.now().strftime("%d/%m/%Y %H:%M"), "passagers": n_pass, "dates": reperes})
     return tous
 
 

@@ -117,6 +117,7 @@ a{color:var(--accent-text);text-decoration:none}
 .chip{font-size:12.5px;font-weight:500;padding:3px 9px;border-radius:980px;background:var(--fill-2);color:var(--text-2)}
 .chip.green{background:var(--green-soft);color:var(--green)}
 .chip.orange{background:var(--orange-soft);color:var(--orange)}
+.chip.red{background:rgba(255,59,48,.14);color:var(--red)}
 
 .alts{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
 .alt{background:var(--surface);border-radius:16px;box-shadow:var(--shadow);padding:16px 18px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;align-items:center;color:var(--text);transition:transform .15s var(--ease)}
@@ -555,6 +556,39 @@ function badges(v, ligne=false){
     v.depart < "05:00" ? '<span class="chip orange">Part la nuit précédente</span>' : "",
     v.autonome ? '<span class="chip orange">Billets séparés</span>' : ""].join("");
 }
+/* Repère de Google Flights : le prix est-il bas, normal ou élevé pour ce trajet, et comment a-t-il évolué ces dernières semaines.
+   Google donne des prix pour l'ensemble des voyageurs : on les ramène au prix par personne, comme le reste de l'app. */
+function repereHTML(V, meilleur){
+  const R = V.repere; if (!R || !R.dates) return "";
+  const n = R.passagers || 1, dates = Object.keys(R.dates).sort();
+  const d = R.dates[meilleur && R.dates[meilleur.date] ? meilleur.date : dates[0]];
+  if (!d) return "";
+  const niveau = {low: ["Prix bas", "green"], typical: ["Prix habituel", "orange"], high: ["Prix élevé", "red"]}[d.price_level];
+  const fourchette = Array.isArray(d.typical_price_range) && d.typical_price_range.length === 2 ? d.typical_price_range.map(x => x / n) : null;
+  let courbe = "";
+  const h = (d.price_history || []).filter(x => Array.isArray(x) && x.length === 2 && isFinite(x[1]));
+  if (h.length >= 2) {
+    const ms = t => t > 1e12 ? t : t * 1000, pts = h.map(([t, v]) => [ms(t), v / n]);
+    const W = 640, Ht = 110, P = {l:4, r:4, t:10, b:22}, xs = pts.map(q => q[0]), ys = pts.map(q => q[1]);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs), lo = Math.min(...ys), hi = Math.max(...ys), pad = Math.max(10, (hi - lo) * .2);
+    const X = t => P.l + (t - x0) / Math.max(1, x1 - x0) * (W - P.l - P.r), Y = v => P.t + (1 - (v - lo + pad) / (hi - lo + 2 * pad)) * (Ht - P.t - P.b);
+    const ligne = pts.map((q, i) => (i ? "L" : "M") + X(q[0]).toFixed(1) + " " + Y(q[1]).toFixed(1)).join(" ");
+    const jourCourt = t => new Date(t).toLocaleDateString("fr-FR", {day:"numeric", month:"short"});
+    let bande = "";
+    if (fourchette) { const a = Y(Math.min(Math.max(fourchette[1], lo - pad), hi + pad)), b = Y(Math.max(Math.min(fourchette[0], hi + pad), lo - pad));
+      bande = `<rect x="${P.l}" y="${Math.min(a, b).toFixed(1)}" width="${W - P.l - P.r}" height="${Math.abs(b - a).toFixed(1)}" fill="var(--fill)"/>`; }
+    courbe = `<svg viewBox="0 0 ${W} ${Ht}" role="img" aria-label="Prix de ce trajet sur Google Flights ces dernières semaines" style="margin-top:10px">${bande}
+      <path d="${ligne}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <text x="${P.l}" y="${Ht-4}" font-size="11" fill="var(--text-2)">${esc(jourCourt(x0))}</text>
+      <text x="${W-P.r}" y="${Ht-4}" text-anchor="end" font-size="11" fill="var(--text-2)">${esc(jourCourt(x1))}</text></svg>
+      <p class="muted" style="font-size:12.5px;margin-top:4px">Prix le plus bas vu par Google pour ce trajet, jour après jour${fourchette ? " ; la bande grise montre la fourchette habituelle" : ""}.</p>`;
+  }
+  if (!niveau && !fourchette && !courbe) return "";
+  return `<section class="section"><h3>Repère Google Flights</h3><div class="trend">
+    <div class="meta">${niveau ? `<span class="chip ${niveau[1]}">${niveau[0]}</span>` : ""}${fourchette ? `<span>Habituellement entre <b>${eur(fourchette[0])}</b> et <b>${eur(fourchette[1])}</b> par personne</span>` : ""}</div>
+    ${courbe}<p class="muted" style="font-size:12.5px;margin-top:6px">Analyse de Google Flights au ${esc(R.maj)} : un repère, pas une garantie.</p></div></section>`;
+}
+
 function corps(p, V){
   const ok = V.vols.filter(v => v.ok);
   const f = FILTRE[p.id] || (FILTRE[p.id] = {date: [...new Set(V.vols.map(v => v.date))].includes(p.date_aller) ? p.date_aller : "tous", direct:false, hors:false, tri:"prix"});
@@ -598,6 +632,7 @@ function corps(p, V){
       </div>
       <div class="list" id="liste-vols"></div>
     </section>
+    ${repereHTML(V, ok.length ? minBy(ok, v => v.prix) : null)}
     ${H.length >= 2 ? `<section class="section"><h3>Évolution du prix</h3><div class="trend" id="trend"></div></section>` : ""}
     <section class="section">
       <h3>Vérifier sur les sites</h3>

@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 1.2.5 (25/11/2026)
+
+- Nouveau : « Repère Google Flights » sur la page d'un voyage : prix bas, habituel ou élevé pour ce trajet, fourchette de prix habituelle par personne, et courbe des prix des dernières semaines vue par Google. Ces informations arrivent avec chaque recherche Google Flights, sans en consommer davantage.
+
 ## 1.2.4 (25/11/2026)
 
 - Alertes plus claires : les montants sont indiqués « par personne » (le prix d'un billet), avec le total pour le groupe quand il y a plusieurs voyageurs (par exemple « 600 € par personne, soit 1 800 € pour vos 3 voyageurs »), dans le questionnaire et dans la fiche de modification.

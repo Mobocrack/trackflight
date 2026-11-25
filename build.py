@@ -113,7 +113,17 @@ def donnees_voyage(p):
               "prix", "prix_total", "prix_max", "source", "lien", "site", "autonome", "ok", "retour", "obs")
     vols = consolider(p, d["vols"])
     return {"projet": _projet_public(p), "releve": d["releve"], "sources": d.get("sources", "Kayak"),
-            "histo": historique(p), "vols": [{k: v.get(k) for k in champs} for v in vols], "liens": P.liens(p)}
+            "histo": historique(p), "vols": [{k: v.get(k) for k in champs} for v in vols], "liens": P.liens(p),
+            "repere": repere_google(p)}
+
+
+def repere_google(p):
+    """Repère de Google Flights enregistré au dernier relevé (None s'il n'y en a pas)."""
+    try:
+        with open(os.path.join(P.dossier(p), "google_repere.json"), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
 
 
 def resume_projet(p):
