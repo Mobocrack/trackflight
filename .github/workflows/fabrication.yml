@@ -55,7 +55,7 @@ jobs:
           # Le pilote Playwright (node) n'est utilisé que pour télécharger Chromium : il est exclu du contrôle.
           trop=0
           while IFS= read -r f; do
-            v=$(vtool -show-build "$f" 2>/dev/null | awk '/minos/{print $2; exit}')
+            v=$(vtool -show-build "$f" 2>/dev/null | awk '/minos/{print $2; exit}' || true)  # fichiers non Mach-O (scripts) : ignorés
             [ -z "$v" ] && continue
             if [ "$(printf '%s\n11.0\n' "$v" | sort -V | tail -1)" != "11.0" ]; then echo "Exige macOS $v : $f"; trop=1; fi
           done < <(find dist/Trackflight.app/Contents -type f \( -name '*.so' -o -name '*.dylib' -o -perm -u+x \) -not -path '*/playwright/driver/*')

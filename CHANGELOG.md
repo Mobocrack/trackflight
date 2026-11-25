@@ -1,9 +1,10 @@
 # Journal des versions
 
-## 1.3.1 (25/11/2026)
+## 1.3.2 (25/11/2026)
 
-- Correctif : la 1.3.0 ne démarrait pas sur les Mac Intel sous un macOS antérieur à la version 15. La bibliothèque de chiffrement « cryptography » n'est plus publiée prête à l'emploi pour Mac Intel : recompilée par GitHub, elle embarquait une copie d'OpenSSL exigeant macOS 15. Le coffre utilise désormais PyCryptodome (même chiffrement AES-256-GCM et scrypt, autonome, compatible dès macOS 10.9) ; un coffre créé avec la 1.3.0 reste lisible.
+- Correctif : la 1.3.0 ne démarrait pas sur les Mac Intel (erreur « Symbol not found: _SSL_get0_group_name »). La bibliothèque « cryptography » n'est plus publiée prête à l'emploi pour Mac Intel : recompilée par GitHub contre une version d'OpenSSL plus récente que celle livrée avec l'app, elle plantait au démarrage. Le coffre utilise désormais PyCryptodome (même chiffrement AES-256-GCM et scrypt, autonome, sans OpenSSL) ; un coffre créé avec la 1.3.0 reste lisible.
 - Fabrication : contrôle automatique qui refuse de publier une version Mac dont un fichier exige un macOS plus récent que macOS 11.
+- La 1.3.1 n'a pas été publiée (contrôle de fabrication défectueux, corrigé ici).
 
 ## 1.3.0 (25/11/2026)
 
