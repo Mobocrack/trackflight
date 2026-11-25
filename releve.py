@@ -211,6 +211,34 @@ def appliquer_retour(v, retours, p):
                          ok=P.garde(p, dict(v, retour=dict(r, autonome=False)))) for r in retours[:6]]
 
 
+def choisir_retour(p, jeton, index):
+    """Choix manuel d'un retour parmi ceux déjà connus (aucune recherche, aucun crédit).
+    index -1 : revenir au choix automatique (le moins cher qui respecte les critères).
+    Le choix vaut jusqu'à la prochaine recherche, qui repropose le choix automatique."""
+    chemin = os.path.join(P.dossier(p), "derniers.json")
+    d = lire_json(chemin, None)
+    trouve = None
+    for v in (d or {}).get("vols", []):
+        if v.get("jeton_retour") != jeton or not v.get("retours"):
+            continue
+        rs = v["retours"]
+        if index == -1:
+            r, manuel = next((x for x in rs if x.get("ok")), rs[0]), False
+        elif 0 <= index < len(rs):
+            r, manuel = rs[index], True
+        else:
+            continue
+        v["retour"] = {k: r[k] for k in RETOUR_CHAMPS}
+        v["prix_total"], v["prix"] = r["prix_total"], r["prix"]
+        v["retour_choisi"] = manuel
+        trouve = r
+    if not trouve:
+        raise RuntimeError("Ce retour n'est plus disponible : relancez une recherche.")
+    ecrire_json(chemin, d)
+    log.info("[%s] retour %s : %s", p["id"], "choisi à la main" if index != -1 else "automatique", trouve["compagnie"])
+    return trouve
+
+
 def retour_a_la_demande(p, date, jeton):
     """Bouton « Voir le vol retour » : une recherche pour ce vol aller, comptée dans le quota de la clé,
     puis le résultat est enregistré dans derniers.json. Renvoie la liste des retours."""

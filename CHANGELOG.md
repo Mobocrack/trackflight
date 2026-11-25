@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 1.3.5 (25/11/2026)
+
+- Aller-retour : dans le détail d'un vol, un clic sur un autre retour de la liste le choisit (même hors critères, par exemple plus court ou d'une autre compagnie). Le prix, les badges (ESTA, AVE, ETA) et la carte du meilleur prix suivent ce choix. Aucun crédit utilisé.
+- Badge « Retour choisi » et lien « Revenir au choix automatique » ; la prochaine recherche repropose le choix automatique (le moins cher qui respecte les critères).
+
 ## 1.3.4 (25/11/2026)
 
 - Nouveau : crédits Google Flights restants de la clé active, en bas de la fenêtre et dans les Réglages (lus sur la page « compte » de SerpApi, sans consommer de crédit). Actualisés au démarrage, après chaque recherche, après un changement de clé et toutes les 5 minutes ; en orange sous 20 crédits.

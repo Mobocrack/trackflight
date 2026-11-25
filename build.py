@@ -94,7 +94,9 @@ def consolider(p, vols):
         best = min(v["obs"], key=lambda o: o["prix"])
         v.update(prix=best["prix"], source=best["source"], lien=best["lien"],
                  prix_max=max(o["prix"] for o in v["obs"]), site=lien_compagnie(v["compagnie"]),
-                 ok=P.garde(p, v), prix_total=v.get("prix_total", v["prix"]))
+                 # un retour choisi à la main compte comme accepté : seuls les critères de l'aller s'appliquent
+                 ok=P.garde(p, dict(v, retour=None)) if v.get("retour_choisi") else P.garde(p, v),
+                 prix_total=v.get("prix_total", v["prix"]))
         res.append(v)
     res.sort(key=lambda v: (not v["ok"], v["prix"]))
     return res
@@ -144,7 +146,7 @@ def donnees_voyage(p):
         return None
     champs = ("date", "compagnie", "depart", "arrivee", "aeroports", "duree", "escales", "via", "escale_detail",
               "prix", "prix_total", "prix_max", "source", "lien", "site", "autonome", "ok", "retour", "obs",
-              "formalites", "logo", "jeton_retour", "retours")
+              "formalites", "logo", "jeton_retour", "retours", "retour_choisi")
     vols = consolider(p, d["vols"])
     return {"projet": _projet_public(p), "releve": d["releve"], "sources": d.get("sources", "Kayak"),
             "histo": historique(p), "vols": [{k: v.get(k) for k in champs} for v in vols], "liens": P.liens(p),

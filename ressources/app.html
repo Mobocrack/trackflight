@@ -162,6 +162,8 @@ select.plain{border:0;background:var(--fill);border-radius:8px;padding:6px 10px;
 .retour-dem{flex-basis:100%;display:flex;flex-direction:column;gap:6px;margin-top:6px;font-size:13.5px}
 .retour-opt{display:grid;grid-template-columns:minmax(120px,1fr) 2fr auto;gap:10px;align-items:center;padding:6px 10px;border-radius:10px;background:var(--fill)}
 .retour-opt.retenu{outline:2px solid var(--accent)}
+button.retour-opt{border:0;font:inherit;color:inherit;text-align:left;cursor:pointer;width:100%}
+button.retour-opt:hover:not(.retenu){background:var(--fill-2)}
 .credits{font-size:12px;color:var(--text-2);margin-top:6px;flex-basis:100%}
 .credits b{color:var(--text);display:inline;font-size:inherit;font-weight:600}
 .credits.faible,.credits.faible b{color:var(--orange)}
@@ -587,6 +589,7 @@ function badges(v, ligne=false){
   return [direct(v) && !ligne ? '<span class="chip green">Direct</span>' : "",
     v.depart < "05:00" ? '<span class="chip orange">Part la nuit précédente</span>' : "",
     v.autonome ? '<span class="chip orange">Billets séparés</span>' : "",
+    v.retour_choisi ? `<span class="chip" title="Retour choisi par vous ; la prochaine recherche reprend le choix automatique.">Retour choisi</span>` : "",
     v.jeton_retour && !v.retour ? `<span class="chip" title="Le vol retour n'a pas encore été détaillé : ouvrez la ligne pour le voir (durée et escales du retour non vérifiées).">Retour à voir</span>` : "",
     ...(v.formalites || []).map(f => `<span class="chip orange" title="${esc(f.long)}. Pour un passeport français ; vérifiez sur le site officiel avant de réserver.">${esc(ligne ? f.court : f.long)}</span>`)].join("");
 }
@@ -691,11 +694,24 @@ function ligneVol(v, i, p){
 function retourHTML(v, p){
   if (!v.jeton_retour) return "";
   if (!v.retour) return `<div class="retour-dem"><button class="btn" data-retour data-id="${esc(p ? p.id : "")}" data-date="${esc(v.date)}" data-jeton="${esc(v.jeton_retour)}">Voir le vol retour</button><span class="muted">Une recherche Google Flights (1 crédit de la clé).</span></div>`;
-  const autres = (v.retours || []).slice(0, 5);
-  return `<div class="retour-dem"><b>Retours possibles avec cet aller</b>${autres.map(x => `<div class="retour-opt${x.depart === v.retour.depart && x.compagnie === v.retour.compagnie ? " retenu" : x.ok === false ? " hors" : ""}">
-    <span>${logo(x)}${esc(x.compagnie)}</span><span>${esc(jour(x.date))} · ${tempsHTML(x.depart)} → ${tempsHTML(x.arrivee)} · ${dur(x.duree)} · ${x.escales ? "via " + esc(x.via) : "direct"}${x.ok === false ? " · hors critères" : ""}</span><b>${eur(x.prix)}</b></div>`).join("")}
-    <span class="muted">Prix aller-retour par personne. Le vol retour affiché est le moins cher qui respecte vos critères.</span></div>`;
+  const autres = (v.retours || []).slice(0, 5), id = esc(p ? p.id : ""), jt = esc(v.jeton_retour);
+  const retenu = x => x.depart === v.retour.depart && x.compagnie === v.retour.compagnie && x.date === v.retour.date;
+  return `<div class="retour-dem"><b>Retours possibles avec cet aller</b>${autres.map((x, k) => `<button type="button" class="retour-opt${retenu(x) ? " retenu" : x.ok === false ? " hors" : ""}" data-choix="${k}" data-id="${id}" data-jeton="${jt}" ${retenu(x) ? 'aria-pressed="true"' : ""} title="${retenu(x) ? "Retour retenu" : "Choisir ce retour"}">
+    <span>${logo(x)}${esc(x.compagnie)}</span><span>${esc(jour(x.date))} · ${tempsHTML(x.depart)} → ${tempsHTML(x.arrivee)} · ${dur(x.duree)} · ${x.escales ? "via " + esc(x.via) : "direct"}${x.ok === false ? " · hors critères" : ""}</span><b>${eur(x.prix)}</b></button>`).join("")}
+    <span class="muted">Prix aller-retour par personne. ${v.retour_choisi
+      ? `Retour choisi par vous, jusqu'à la prochaine recherche. <a href="#" data-choix="-1" data-id="${id}" data-jeton="${jt}">Revenir au choix automatique</a>`
+      : "Par défaut : le moins cher qui respecte vos critères. Cliquez sur un autre retour pour le choisir (aucun crédit utilisé)."}</span></div>`;
 }
+document.addEventListener("click", async e => {
+  const c = e.target.closest("[data-choix]"); if (!c) return;
+  e.preventDefault(); e.stopPropagation();
+  if (c.getAttribute("aria-pressed") === "true") return;
+  try {
+    const r = await api("/api/choisir-retour", {id: c.dataset.id, jeton: c.dataset.jeton, index: +c.dataset.choix});
+    delete VOY[c.dataset.id]; await charger();
+    toast(+c.dataset.choix === -1 ? "Retour automatique rétabli" : `Retour ${r.compagnie} choisi${r.dans_criteres ? "" : " (hors de vos critères)"}`);
+  } catch (err) { toast(err.message); }
+});
 document.addEventListener("click", async e => {
   const b = e.target.closest("[data-retour]"); if (!b) return;
   e.stopPropagation(); b.disabled = true; b.textContent = "Recherche du vol retour…";

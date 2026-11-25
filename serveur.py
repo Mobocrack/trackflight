@@ -348,6 +348,20 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._envoyer(200, {"ok": True, "serpapi": True, "google_seul": cfg["google_seul"], "offre": compte.get("plan_name") or "",
                                        "restant": restant(compte), "app": etat_app()})
 
+        if chemin == "/api/choisir-retour":
+            p = next((x for x in P.charger() if x["id"] == corps.get("id")), None)
+            if not p or not corps.get("jeton"):
+                return self._envoyer(400, {"erreur": "Vol introuvable."})
+            try:
+                index = int(corps.get("index", -1))
+                with VERROU:
+                    r = releve.choisir_retour(p, str(corps["jeton"]), index)
+            except (TypeError, ValueError):
+                return self._envoyer(400, {"erreur": "Choix invalide."})
+            except RuntimeError as e:
+                return self._envoyer(409, {"erreur": str(e)})
+            return self._envoyer(200, {"ok": True, "compagnie": r["compagnie"], "dans_criteres": bool(r.get("ok"))})
+
         if chemin == "/api/retour":
             p = next((x for x in P.charger() if x["id"] == corps.get("id")), None)
             if not p or p["type"] != "ar" or not corps.get("jeton") or not corps.get("date"):
