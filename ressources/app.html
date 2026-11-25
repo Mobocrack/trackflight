@@ -65,7 +65,7 @@ a{color:var(--accent-text);text-decoration:none}
 .t-price{grid-row:1/3;grid-column:2;text-align:right;font:600 15px var(--font)}
 .t-price small{display:block;font-weight:400;font-size:11.5px;color:var(--text-2)}
 .trip.off{opacity:.55}
-.side-foot{border-top:1px solid var(--sep);padding:10px 14px;display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--text-2)}
+.side-foot{border-top:1px solid var(--sep);padding:10px 14px;display:flex;flex-wrap:wrap;align-items:center;gap:10px;font-size:12.5px;color:var(--text-2)}
 .side-foot .grow{flex:1;min-width:0}
 .side-foot b{display:block;color:var(--text);font-weight:500;font-size:13px}
 .side-foot .bar{height:3px;border-radius:2px;background:var(--fill);margin-top:6px;overflow:hidden}
@@ -162,6 +162,9 @@ select.plain{border:0;background:var(--fill);border-radius:8px;padding:6px 10px;
 .retour-dem{flex-basis:100%;display:flex;flex-direction:column;gap:6px;margin-top:6px;font-size:13.5px}
 .retour-opt{display:grid;grid-template-columns:minmax(120px,1fr) 2fr auto;gap:10px;align-items:center;padding:6px 10px;border-radius:10px;background:var(--fill)}
 .retour-opt.retenu{outline:2px solid var(--accent)}
+.credits{font-size:12px;color:var(--text-2);margin-top:6px;flex-basis:100%}
+.credits b{color:var(--text);display:inline;font-size:inherit;font-weight:600}
+.credits.faible,.credits.faible b{color:var(--orange)}
 .retour-opt.hors{opacity:.55}
 .row.open .row-more{display:flex}
 .offer{display:flex;gap:14px;align-items:center;justify-content:space-between;border-radius:10px;background:var(--fill-2);padding:9px 12px;font-size:13.5px;color:var(--text);min-width:200px;flex:1}
@@ -435,6 +438,7 @@ async function charger(){
   /* sur écran étroit, on commence par la liste (comme sur iPhone), sauf si un voyage est demandé dans l'adresse */
   await afficher(sel, false, !matchMedia("(max-width: 760px)").matches || !!voulu);
   if (D.statut.en_cours) suivre();
+  majCredits();
   if (!D.reglages.accueil_vu && $("#wiz").hidden) tutoriel();
   else if (D.reglages.app.cle_epuisee && D.reglages.app.coffre && !COFFRE_PROPOSE) { COFFRE_PROPOSE = true; ouvrirCoffre("epuisee"); }
 }
@@ -483,11 +487,27 @@ function dessinerPied(prog){
   } else {
     html = `<div class="grow"><b>Prix mis à jour chaque jour</b>Prochaine recherche à ${D.reglages.heure ?? 9} h, ou au démarrage de l'ordinateur.</div>`;
   }
-  $("#foot").innerHTML = html;
+  $("#foot").innerHTML = html + creditsHTML();
   const bm = $("#b-maj"); if (bm) bm.onclick = mettreAJour;
   const br = $("#b-recherche-reglages"); if (br) br.onclick = reglages;
   const bc = $("#b-coffre"); if (bc) bc.onclick = () => a.coffre ? ouvrirCoffre("epuisee") : reglages();
 }
+/* Crédits Google Flights de la clé active, en bas de la fenêtre (actualisés au démarrage, après chaque recherche et toutes les 5 minutes). */
+let CREDITS = null;
+function creditsHTML(){
+  const c = CREDITS; if (!c || !c.cle) return "";
+  if (c.erreur) return `<div class="credits">Crédits Google Flights : ${esc(c.erreur)}</div>`;
+  if (c.restant == null) return "";
+  const faible = c.restant <= 20;
+  return `<div class="credits${faible ? " faible" : ""}">Google Flights : <b>${c.restant}</b> crédit${c.restant > 1 ? "s" : ""} restant${c.restant > 1 ? "s" : ""}${c.par_mois ? ` sur ${c.par_mois} ce mois-ci` : ""}${D.reglages.serpapi_nom ? ` · clé ${esc(D.reglages.serpapi_nom)}` : ""}</div>`;
+}
+async function majCredits(force=false){
+  CREDITS = await api("/api/credits" + (force ? "?force=1" : "")).catch(() => CREDITS);
+  dessinerPied();
+  const el = $("#r-credits"); if (el) el.textContent = CREDITS && CREDITS.restant != null ? `${CREDITS.restant}${CREDITS.par_mois ? " sur " + CREDITS.par_mois : ""}` : "—";
+}
+setInterval(() => majCredits(), 5 * 60 * 1000);
+
 function mettreAJour(){
   confirmer(`Installer la version ${D.reglages.maj.derniere} ?`, "Trackflight va télécharger la mise à jour, se fermer, s'installer puis se rouvrir. Vos voyages sont conservés.", "Mettre à jour", async () => {
     try { await api("/api/maj", {installer: true}); D.reglages.maj.en_cours = true; dessinerPied(); suivre(); }
@@ -679,7 +699,7 @@ function retourHTML(v, p){
 document.addEventListener("click", async e => {
   const b = e.target.closest("[data-retour]"); if (!b) return;
   e.stopPropagation(); b.disabled = true; b.textContent = "Recherche du vol retour…";
-  try { await api("/api/retour", {id: b.dataset.id, date: b.dataset.date, jeton: b.dataset.jeton}); delete VOY[b.dataset.id]; await afficher(b.dataset.id, false); toast("Vol retour ajouté"); }
+  try { await api("/api/retour", {id: b.dataset.id, date: b.dataset.date, jeton: b.dataset.jeton}); delete VOY[b.dataset.id]; await afficher(b.dataset.id, false); majCredits(true); toast("Vol retour ajouté"); }
   catch (err) { b.disabled = false; b.textContent = "Voir le vol retour"; toast(err.message); }
 });
 function dessinerVols(p, V){
@@ -772,7 +792,7 @@ function suivre(){
     const pr = s.progression;
     document.querySelectorAll(".waiting .bar i").forEach(i => i.style.width = (pr && pr.total ? Math.round(100*pr.fait/pr.total) : 5) + "%");
     if (!s.en_cours && !(s.maj && s.maj.en_cours)) {
-      clearInterval(pollT); enCours = false; VOY = {};
+      clearInterval(pollT); enCours = false; VOY = {}; majCredits(true);
       const avant = D.resumes[sel] && D.resumes[sel].meilleur;
       await charger();
       const apres = D.resumes[sel] && D.resumes[sel].meilleur;
@@ -1052,7 +1072,7 @@ function ouvrirCoffre(motif){
     document.querySelectorAll("#s-coffre [data-util]").forEach(b => b.onclick = async () => {
       const nom = r.cles[+b.dataset.util].nom;
       try { const x = await api("/api/coffre/utiliser", {mdp: S.mdp, nom}); D.reglages.app = x.app; D.reglages.serpapi = true; D.reglages.serpapi_nom = nom;
-        dessinerPied(); toast(`La clé de ${nom} est maintenant active`); await ecranListe(); } catch (e) { erreur(e); } });
+        majCredits(true); toast(`La clé de ${nom} est maintenant active`); await ecranListe(); } catch (e) { erreur(e); } });
     document.querySelectorAll("#s-coffre [data-ret]").forEach(b => b.onclick = async () => {
       try { await api("/api/coffre/retirer", {mdp: S.mdp, nom: r.cles[+b.dataset.ret].nom}); await ecranListe(); } catch (e) { erreur(e); } });
     $("#k-chg").onclick = e => { e.preventDefault(); ecranChanger(); };
@@ -1095,6 +1115,7 @@ function reglages(){
       <div class="cell"><button class="btn link" id="r-coller">Coller</button><button class="btn link" id="r-verifier-cle">${R.serpapi ? "Vérifier la clé" : "Vérifier et enregistrer"}</button></div>
       <div class="cell"><label class="toggle" style="color:var(--text);font-size:15px;justify-content:space-between;width:100%"><span>Utiliser seulement Google Flights</span><input type="checkbox" id="r-google-seul" ${R.google_seul ? "checked" : ""}><span class="switch"></span></label></div>
       <div class="cell"><span class="lab">Clé active</span><span class="muted">${R.serpapi ? esc(R.serpapi_nom || "Ma clé") : "Aucune"}</span></div>
+      ${R.serpapi ? `<div class="cell"><span class="lab">Crédits restants ce mois-ci</span><span class="muted" id="r-credits">${CREDITS && CREDITS.restant != null ? CREDITS.restant + (CREDITS.par_mois ? " sur " + CREDITS.par_mois : "") : "…"}</span></div>` : ""}
       <div class="cell"><span class="lab">Coffre à clés</span><button class="btn link" id="r-coffre">${a.coffre ? "Ouvrir" : "Créer"}</button></div>
     </div><p class="foot-note" id="r-cle-etat" role="status" hidden></p>
     <p class="foot-note">La clé vient d'un compte gratuit SerpApi (250 recherches par mois) : <a href="https://serpapi.com/users/sign_up" target="_blank" rel="noopener">créer le compte</a>, puis <a href="https://serpapi.com/manage-api-key" target="_blank" rel="noopener">copier la clé</a>. Elle reste sur cet ordinateur. Si Kayak et Momondo bloquent la recherche, activez « Utiliser seulement Google Flights ».${R.serpapi ? ' <a href="#" id="r-eff">Retirer la clé</a>' : ""}</p>
@@ -1146,7 +1167,7 @@ function reglages(){
     const b = $("#r-verifier-cle"); b.disabled = true; b.textContent = "Vérification…";
     try {
       const r = await api("/api/verifier-cle", {cle: $("#r-cle").value.trim()});
-      R.serpapi = true; R.google_seul = r.google_seul; R.app = r.app; $("#r-cle").value = ""; $("#r-cle").placeholder = "Enregistrée";
+      majCredits(true); R.serpapi = true; R.google_seul = r.google_seul; R.app = r.app; $("#r-cle").value = ""; $("#r-cle").placeholder = "Enregistrée";
       $("#r-google-seul").checked = r.google_seul;
       etatCle("Clé valide et enregistrée" + (r.restant != null ? ` : ${r.restant} recherches restantes ce mois-ci.` : "."), true);
       dessinerPied();

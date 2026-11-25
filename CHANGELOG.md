@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 1.3.4 (25/11/2026)
+
+- Nouveau : crédits Google Flights restants de la clé active, en bas de la fenêtre et dans les Réglages (lus sur la page « compte » de SerpApi, sans consommer de crédit). Actualisés au démarrage, après chaque recherche, après un changement de clé et toutes les 5 minutes ; en orange sous 20 crédits.
+
 ## 1.3.3 (25/11/2026)
 
 - Aller-retour : le vol retour est maintenant connu. Pour les meilleures offres (jusqu'à 3 qui respectent tous les critères, 5 recherches au plus), l'app récupère automatiquement les vols retour sur Google Flights et retient le moins cher qui respecte les critères. Le prix affiché devient le vrai prix aller-retour.

@@ -83,6 +83,28 @@ def activer_cle(cfg, cle, nom):
         pass
 
 
+CREDITS = {"cle": None, "quand": 0, "reponse": None}
+
+
+def credits(force=False):
+    """Crédits restants de la clé active, lus sur la page « compte » de SerpApi (ne consomme aucun crédit).
+    Gardés une minute en mémoire pour ne pas interroger SerpApi à chaque affichage."""
+    cle = releve.config()["serpapi_cle"]
+    if not cle:
+        return {"cle": False}
+    empreinte = releve.hashlib.sha256(cle.encode()).hexdigest()[:12]
+    if not force and CREDITS["cle"] == empreinte and time.time() - CREDITS["quand"] < 60:
+        return CREDITS["reponse"]
+    try:
+        c = compte_serpapi(cle)
+        rep = {"cle": True, "restant": restant(c), "par_mois": c.get("searches_per_month"),
+               "utilises": c.get("this_month_usage"), "offre": c.get("plan_name") or ""}
+    except CleRefusee as e:
+        rep = {"cle": True, "erreur": str(e)}
+    CREDITS.update(cle=empreinte, quand=time.time(), reponse=rep)
+    return rep
+
+
 def etat_app():
     requis = bool(releve.sources_navigateur(releve.config()))
     return {"navigateur_requis": requis, "navigateur_pret": requis and navigateur.pret(),
@@ -237,6 +259,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
                              "programmee": installation.est_installee(), "app": etat_app(),
                              "theme": cfg["theme"], "version": maj.version(), "maj": maj.ETAT,
                              "systeme": chemins.SYSTEME, "accueil_vu": cfg["accueil_vu"]}})
+        if chemin == "/api/credits":
+            return self._envoyer(200, credits(force="force" in self.path))
         if chemin == "/api/journal":
             return self._envoyer(200, {"lignes": journal_lisible()})
         if chemin == "/api/statut":
