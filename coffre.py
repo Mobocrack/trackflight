@@ -4,7 +4,7 @@ Le coffre range des clés prêtées par d'autres personnes, avec leur accord («
 La clé active reste dans les réglages de l'app : le coffre ne sert qu'à l'échanger, quand quelqu'un
 est devant l'écran pour taper le mot de passe. La recherche automatique n'ouvre jamais le coffre.
 
-Chiffrement (bibliothèque « cryptography », rien d'inventé) :
+Chiffrement (bibliothèque « PyCryptodome », autonome, sans OpenSSL ; rien d'inventé) :
 - une clé de données aléatoire de 256 bits chiffre le contenu (AES-256-GCM) ;
 - cette clé de données est elle-même chiffrée deux fois : avec une clé tirée du mot de passe
   (scrypt), et avec une clé tirée du code de secours (scrypt), affiché une seule fois à la création.
@@ -15,9 +15,8 @@ import json
 import os
 import secrets
 
-from cryptography.exceptions import InvalidTag
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
+from Crypto.Cipher import AES
+from Crypto.Protocol.KDF import scrypt as _scrypt
 
 import chemins
 
@@ -41,16 +40,23 @@ def _octets(s):
 
 
 def _deriver(secret, sel, n=SCRYPT["n"], r=SCRYPT["r"], p=SCRYPT["p"]):
-    return Scrypt(salt=sel, length=32, n=n, r=r, p=p).derive(secret.encode("utf-8"))
+    return _scrypt(secret.encode("utf-8"), sel, key_len=32, N=n, r=r, p=p)
 
 
+# AES-256-GCM. Format : texte chiffré suivi de l'étiquette d'authenticité (16 octets), comme la norme le prévoit.
 def _sceller(cle, donnees, contexte):
     nonce = os.urandom(12)
-    return {"nonce": _b64(nonce), "texte": _b64(AESGCM(cle).encrypt(nonce, donnees, contexte))}
+    c = AES.new(cle, AES.MODE_GCM, nonce=nonce)
+    c.update(contexte)
+    texte, etiquette = c.encrypt_and_digest(donnees)
+    return {"nonce": _b64(nonce), "texte": _b64(texte + etiquette)}
 
 
 def _ouvrir(cle, boite, contexte):
-    return AESGCM(cle).decrypt(_octets(boite["nonce"]), _octets(boite["texte"]), contexte)
+    brut = _octets(boite["texte"])
+    c = AES.new(cle, AES.MODE_GCM, nonce=_octets(boite["nonce"]))
+    c.update(contexte)
+    return c.decrypt_and_verify(brut[:-16], brut[-16:])  # ValueError si la clé est fausse ou le fichier modifié
 
 
 def _normaliser_code(code):
@@ -108,7 +114,7 @@ def creer(mdp):
         raise CoffreErreur("Un coffre existe déjà sur cet ordinateur.")
     if len(mdp or "") < MDP_MIN:
         raise CoffreErreur(f"Choisissez un mot de passe d'au moins {MDP_MIN} caractères.")
-    dek, code = AESGCM.generate_key(bit_length=256), nouveau_code()
+    dek, code = secrets.token_bytes(32), nouveau_code()
     _ecrire({"version": VERSION, "verrous": _verrous(dek, mdp=mdp, code=code),
              "contenu": _sceller(dek, b"[]", b"contenu")})
     return code
@@ -122,7 +128,7 @@ def _dek(c, mdp=None, code=None):
         if code:
             v = c["verrous"]["secours"]
             return _ouvrir(_deriver(_normaliser_code(code), _octets(v["sel"]), v["n"], v["r"], v["p"]), v, b"secours")
-    except (InvalidTag, KeyError, ValueError):
+    except (KeyError, ValueError):
         pass
     raise CoffreErreur("Mot de passe incorrect." if mdp else "Code de secours incorrect.")
 
@@ -131,7 +137,10 @@ def lire(mdp=None, code=None):
     """Renvoie la liste des clés [{nom, cle}] (déchiffrée en mémoire seulement)."""
     c = _lire()
     dek = _dek(c, mdp, code)
-    return json.loads(_ouvrir(dek, c["contenu"], b"contenu"))
+    try:
+        return json.loads(_ouvrir(dek, c["contenu"], b"contenu"))
+    except (KeyError, ValueError):
+        raise CoffreErreur("Le fichier du coffre a été abîmé ou modifié : il ne peut plus être lu.")
 
 
 def enregistrer(mdp, cles):

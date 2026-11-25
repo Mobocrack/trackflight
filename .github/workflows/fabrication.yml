@@ -33,7 +33,7 @@ jobs:
       - name: Dépendances
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pyinstaller playwright openpyxl certifi pillow pywebview cryptography
+          python -m pip install pyinstaller playwright openpyxl certifi pillow pywebview pycryptodome==4.6.0
 
       - name: Icônes
         run: python outils/icone.py --icns
@@ -47,6 +47,19 @@ jobs:
           if [ "$RUNNER_OS" = "Windows" ]; then EXE="dist/Trackflight/Trackflight.exe"; else EXE="dist/Trackflight.app/Contents/MacOS/Trackflight"; fi
           TRACKFLIGHT_DONNEES="$RUNNER_TEMP/mv" "$EXE" --desinstaller
           test -d "$RUNNER_TEMP/mv" && echo "L'application démarre."
+
+      - name: Compatibilité macOS (aucun fichier ne doit exiger plus que macOS 11)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          # Le pilote Playwright (node) n'est utilisé que pour télécharger Chromium : il est exclu du contrôle.
+          trop=0
+          while IFS= read -r f; do
+            v=$(vtool -show-build "$f" 2>/dev/null | awk '/minos/{print $2; exit}')
+            [ -z "$v" ] && continue
+            if [ "$(printf '%s\n11.0\n' "$v" | sort -V | tail -1)" != "11.0" ]; then echo "Exige macOS $v : $f"; trop=1; fi
+          done < <(find dist/Trackflight.app/Contents -type f \( -name '*.so' -o -name '*.dylib' -o -perm -u+x \) -not -path '*/playwright/driver/*')
+          [ $trop -eq 0 ] && echo "Tous les fichiers fonctionnent dès macOS 11." || exit 1
 
       - name: Installateur Windows
         if: runner.os == 'Windows'

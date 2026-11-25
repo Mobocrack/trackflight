@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 1.3.1 (25/11/2026)
+
+- Correctif : la 1.3.0 ne démarrait pas sur les Mac Intel sous un macOS antérieur à la version 15. La bibliothèque de chiffrement « cryptography » n'est plus publiée prête à l'emploi pour Mac Intel : recompilée par GitHub, elle embarquait une copie d'OpenSSL exigeant macOS 15. Le coffre utilise désormais PyCryptodome (même chiffrement AES-256-GCM et scrypt, autonome, compatible dès macOS 10.9) ; un coffre créé avec la 1.3.0 reste lisible.
+- Fabrication : contrôle automatique qui refuse de publier une version Mac dont un fichier exige un macOS plus récent que macOS 11.
+
 ## 1.3.0 (25/11/2026)
 
 - Nouveau : coffre à clés (Réglages > Google Flights > Coffre à clés). Livré vide, il range les clés prêtées par d'autres personnes, avec leur accord. Chiffré (AES-256-GCM) par un mot de passe choisi par la personne, avec un code de secours affiché une seule fois en cas d'oubli. La clé active reste dans l'app : le coffre ne s'ouvre que pour échanger de clé.

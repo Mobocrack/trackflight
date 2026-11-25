@@ -21,7 +21,7 @@ Rendez-vous dans les **[versions publiées](../../releases/latest)** : le mode d
 | `projets.py`, `villes.py` | Critères des voyages et liens de recherche |
 | `installation.py` | Programmation de la recherche quotidienne (tâche Windows, agent macOS) |
 | `navigateur.py`, `notif.py` | Navigateur de recherche et notifications |
-| `coffre.py` | Coffre à clés chiffré (AES-256-GCM, mot de passe et code de secours dérivés par scrypt) |
+| `coffre.py` | Coffre à clés chiffré avec PyCryptodome (AES-256-GCM, mot de passe et code de secours dérivés par scrypt) |
 
 Les données de l'utilisateur sont dans `%LOCALAPPDATA%\Trackflight` (Windows) ou `~/Library/Application Support/Trackflight` (Mac).
 
@@ -30,7 +30,7 @@ Les comparateurs sont consultés à un rythme modéré, sans aucun contournement
 ## Fabriquer
 
 ```
-pip install pyinstaller playwright openpyxl certifi pillow pywebview cryptography
+pip install pyinstaller playwright openpyxl certifi pillow pywebview pycryptodome==4.6.0
 python outils/icone.py
 pyinstaller Trackflight.spec --noconfirm
 ```
