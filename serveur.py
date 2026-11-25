@@ -15,6 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import build
 import chemins
 import installation
+import maj
 import navigateur
 import notif
 import projets as P
@@ -91,7 +92,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._envoyer(200, {"app": "trackflight"})
         if chemin == "/":
             with open(chemins.ressources("app.html"), encoding="utf-8") as f:
-                return self._envoyer(200, page_html(f.read()), "text/html; charset=utf-8")
+                html = f.read().replace('<html lang="fr">', f'<html lang="fr" data-theme="{releve.config()["theme"]}">', 1)
+                return self._envoyer(200, page_html(html), "text/html; charset=utf-8")
         if chemin == "/api/donnees":
             cfg = releve.config()
             liste = P.charger()
@@ -101,9 +103,12 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 "statut": {"en_cours": releve_actif(), "progression": progression()},
                 "reglages": {"serpapi": bool(cfg["serpapi_cle"]), "notifications": cfg["notifications"],
                              "serpapi_max_mois": cfg["serpapi_max_mois"], "dossier": chemins.donnees(),
-                             "programmee": installation.est_installee(), "app": etat_app()}})
+                             "programmee": installation.est_installee(), "app": etat_app(),
+                             "theme": cfg["theme"], "version": maj.version(), "maj": maj.ETAT,
+                             "systeme": chemins.SYSTEME, "accueil_vu": cfg["accueil_vu"]}})
         if chemin == "/api/statut":
-            return self._envoyer(200, {"en_cours": releve_actif(), "progression": progression(), "app": etat_app()})
+            return self._envoyer(200, {"en_cours": releve_actif(), "progression": progression(), "app": etat_app(),
+                                       "maj": maj.ETAT})
         if chemin.startswith("/api/voyage/"):
             pid = chemin[len("/api/voyage/"):].strip("/")
             p = next((x for x in P.charger() if x["id"] == pid), None)
@@ -175,8 +180,19 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 cfg["serpapi_cle"] = ""
             if "notifications" in corps:
                 cfg["notifications"] = bool(corps["notifications"])
+            if "accueil_vu" in corps:
+                cfg["accueil_vu"] = bool(corps["accueil_vu"])
+            if corps.get("theme") in ("clair", "sombre", "auto"):
+                cfg["theme"] = corps["theme"]
             releve.sauver_config(cfg)
             return self._envoyer(200, {"ok": True, "serpapi": bool(cfg["serpapi_cle"]), "notifications": cfg["notifications"]})
+
+        if chemin == "/api/maj":
+            if corps.get("installer"):
+                if not maj.installer():
+                    return self._envoyer(409, {"erreur": "Aucune mise à jour à installer pour le moment."})
+                return self._envoyer(200, {"ok": True})
+            return self._envoyer(200, maj.verifier(force=True))
 
         if chemin == "/api/afficher":
             import fenetre
@@ -240,10 +256,14 @@ def surveiller(serveur):
 
 def preparer():
     if os.environ.get("TRACKFLIGHT_SANS_INSTALLATION"):  # tests
+        maj.verifier(force=True)
         return
     ok, msg = installation.installer()
     ETAT["installation"] = None if ok else msg
     navigateur.installer_en_fond()
+    while True:  # mises à jour : au démarrage, puis toutes les 6 heures tant que l'app est ouverte
+        maj.verifier(force=True)
+        time.sleep(6 * 3600)
 
 
 def demarrer(surveiller_inactivite=True):

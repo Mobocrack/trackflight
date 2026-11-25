@@ -8,7 +8,7 @@ VERSION = open("VERSION", encoding="utf-8").read().strip()
 a = Analysis(
     ["trackflight.py"],
     pathex=["."],
-    datas=[("ressources", "ressources")],
+    datas=[("ressources", "ressources"), ("VERSION", ".")],
     hiddenimports=["certifi"],
     excludes=["tkinter", "unittest", "pydoc", "PIL", "numpy"],
     noarchive=False,

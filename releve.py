@@ -31,6 +31,8 @@ log = logging.getLogger("trackflight")
 DEFAUT = {
     "sources": ["kayak", "momondo", "google"],
     "notifications": True,
+    "theme": "clair",
+    "accueil_vu": False,        # tutoriel de premier lancement déjà vu           # clair (par défaut), sombre ou auto (suit l'ordinateur)
     "serpapi_cle": "",          # clé gratuite sur serpapi.com (Google Flights), vide = Google ignoré
     "serpapi_max_mois": 120,
 }

@@ -20,7 +20,13 @@
   --ease:cubic-bezier(.32,.72,0,1);
   color-scheme:light;
 }
-@media (prefers-color-scheme:dark){:root{
+:root[data-theme="sombre"]{
+  --bg:#000000; --side:rgba(28,28,30,.86); --surface:#1c1c1e; --fill:rgba(118,118,128,.24); --fill-2:rgba(118,118,128,.16);
+  --text:#f5f5f7; --text-2:#98989d; --text-3:#636366; --sep:rgba(84,84,88,.6);
+  --accent:#0a84ff; --accent-text:#409cff; --accent-soft:rgba(10,132,255,.18);
+  --green:#30d158; --green-soft:rgba(48,209,88,.16); --orange:#ff9f0a; --orange-soft:rgba(255,159,10,.16); --red:#ff453a;
+  --shadow:none; --sheet-shadow:0 24px 80px rgba(0,0,0,.6); color-scheme:dark}
+@media (prefers-color-scheme:dark){:root[data-theme="auto"]{
   --bg:#000000; --side:rgba(28,28,30,.86); --surface:#1c1c1e; --fill:rgba(118,118,128,.24); --fill-2:rgba(118,118,128,.16);
   --text:#f5f5f7; --text-2:#98989d; --text-3:#636366; --sep:rgba(84,84,88,.6);
   --accent:#0a84ff; --accent-text:#409cff; --accent-soft:rgba(10,132,255,.18);
@@ -420,6 +426,7 @@ async function charger(){
   /* sur écran étroit, on commence par la liste (comme sur iPhone), sauf si un voyage est demandé dans l'adresse */
   await afficher(sel, false, !matchMedia("(max-width: 760px)").matches || !!voulu);
   if (D.statut.en_cours) suivre();
+  if (!D.reglages.accueil_vu && $("#wiz").hidden) tutoriel();
 }
 async function voyage(id, frais=false){
   if (!id) return null;
@@ -450,6 +457,10 @@ function dessinerPied(prog){
   if (enCours || D.statut.en_cours) {
     const pr = prog || D.statut.progression, pc = pr && pr.total ? Math.round(100 * pr.fait / pr.total) : 5;
     html = `<span class="spin" style="color:var(--accent)"></span><div class="grow"><b>Recherche des prix…</b>${pr ? esc(pr.texte) + ` · ${pr.fait + 1} sur ${pr.total}` : "Démarrage"}<div class="bar"><i style="width:${pc}%"></i></div></div>`;
+  } else if (D.reglages.maj && D.reglages.maj.en_cours) {
+    html = `<span class="spin" style="color:var(--accent)"></span><div class="grow"><b>Mise à jour en cours…</b>Téléchargement ${D.reglages.maj.progression} %. Trackflight va se rouvrir tout seul.<div class="bar"><i style="width:${D.reglages.maj.progression}%"></i></div></div>`;
+  } else if (D.reglages.maj && D.reglages.maj.disponible) {
+    html = `<div class="grow"><b>Version ${esc(D.reglages.maj.derniere)} disponible</b>Nouveautés et corrections.</div><button class="btn primary" id="b-maj" style="padding:6px 12px;font-size:13px">Mettre à jour</button>`;
   } else if (a.navigateur_prepa) {
     html = `<span class="spin" style="color:var(--accent)"></span><div class="grow"><b>Préparation</b>Téléchargement du navigateur de recherche (une seule fois).</div>`;
   } else if (!D.reglages.programmee) {
@@ -458,6 +469,13 @@ function dessinerPied(prog){
     html = `<div class="grow"><b>Prix mis à jour chaque jour</b>Prochaine recherche à 9 h, ou au démarrage de l'ordinateur.</div>`;
   }
   $("#foot").innerHTML = html;
+  const bm = $("#b-maj"); if (bm) bm.onclick = mettreAJour;
+}
+function mettreAJour(){
+  confirmer(`Installer la version ${D.reglages.maj.derniere} ?`, "Trackflight va télécharger la mise à jour, se fermer, s'installer puis se rouvrir. Vos voyages sont conservés.", "Mettre à jour", async () => {
+    try { await api("/api/maj", {installer: true}); D.reglages.maj.en_cours = true; dessinerPied(); suivre(); }
+    catch (e) { toast(e.message); }
+  });
 }
 
 /* ------------------------------------------------------------ partie droite */
@@ -675,10 +693,11 @@ function suivre(){
   clearInterval(pollT);
   pollT = setInterval(async () => {
     const s = await api("/api/statut").catch(() => null); if (!s) return;
-    D.statut = s; D.reglages.app = s.app; dessinerPied(s.progression);
+    D.statut = s; D.reglages.app = s.app; if (s.maj) D.reglages.maj = s.maj; dessinerPied(s.progression);
+    if (s.maj && s.maj.en_cours) return;
     const pr = s.progression;
     document.querySelectorAll(".waiting .bar i").forEach(i => i.style.width = (pr && pr.total ? Math.round(100*pr.fait/pr.total) : 5) + "%");
-    if (!s.en_cours) {
+    if (!s.en_cours && !(s.maj && s.maj.en_cours)) {
       clearInterval(pollT); enCours = false; VOY = {};
       const avant = D.resumes[sel] && D.resumes[sel].meilleur;
       await charger();
@@ -856,6 +875,9 @@ function reglages(){
   const R = D.reglages, a = R.app;
   $("#s-reglages").innerHTML = `<div class="sheet-head"><span></span><h3>Réglages</h3><button class="btn link" style="font-weight:600" id="r-ok">OK</button></div>
   <div class="sheet-body">
+    <div><div class="grp-title">Apparence</div><div class="grp">
+      <div class="cell col"><div class="seg" id="r-theme"><button type="button" data-v="clair">Clair</button><button type="button" data-v="sombre">Sombre</button><button type="button" data-v="auto">Automatique</button></div></div>
+    </div><p class="foot-note">Automatique suit le réglage de l'ordinateur.</p></div>
     <div><div class="grp-title">Notifications</div><div class="grp">
       <div class="cell"><label class="toggle" style="color:var(--text);font-size:15px;justify-content:space-between;width:100%"><span>Prévenir quand un prix m'intéresse</span><input type="checkbox" id="r-notif" ${R.notifications ? "checked" : ""}><span class="switch"></span></label></div>
       <div class="cell"><span class="lab">Vérifier</span><button class="btn link" id="r-test">Envoyer une notification de test</button></div>
@@ -867,11 +889,24 @@ function reglages(){
     <div><div class="grp-title">Google Flights (facultatif)</div><div class="grp">
       <div class="cell"><label for="r-cle">Clé SerpApi</label><input type="text" id="r-cle" placeholder="${R.serpapi ? "Enregistrée" : "Aucune"}" autocomplete="off" spellcheck="false"></div>
     </div><p class="foot-note">Avec une clé gratuite de serpapi.com, Google Flights s'ajoute à Kayak et Momondo.${R.serpapi ? ' <a href="#" id="r-eff">Retirer la clé</a>' : ""}</p></div>
+    <div><div class="grp-title">Version</div><div class="grp">
+      <div class="cell"><span class="lab">Trackflight ${esc(R.version)}</span><span id="r-maj-etat">${R.maj && R.maj.disponible ? `<button class="btn primary" id="r-maj" style="padding:6px 12px">Installer la ${esc(R.maj.derniere)}</button>` : '<button class="btn link" id="r-verif">Rechercher une mise à jour</button>'}</span></div>
+    </div><p class="foot-note">Les mises à jour sont vérifiées au démarrage. Vos voyages sont conservés.</p></div>
+    <div><div class="grp-title">Aide</div><div class="grp">
+      <div class="cell"><span class="lab">Guide de démarrage</span><button class="btn link" id="r-tuto">Revoir le guide</button></div>
+    </div></div>
     <div><div class="grp-title">Données</div><div class="grp">
       <div class="cell"><span class="lab">Dossier</span><span class="muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left">${esc(R.dossier)}</span></div>
     </div><p class="foot-note">Vos voyages et l'historique des prix restent sur cet ordinateur. Rien n'est envoyé ailleurs.</p></div>
   </div>`;
   const d = $("#d-reglages");
+  $("#r-theme").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === R.theme));
+  segmente($("#r-theme"), async v => { R.theme = v; document.documentElement.dataset.theme = v; await api("/api/reglages", {theme: v}); });
+  const rm = $("#r-maj"); if (rm) rm.onclick = () => { d.close(); mettreAJour(); };
+  const rv = $("#r-verif"); if (rv) rv.onclick = async () => { rv.textContent = "Vérification…";
+    const m = await api("/api/maj", {}).catch(() => null); if (m) D.reglages.maj = m;
+    if (m && m.disponible) { reglages(); dessinerPied(); } else { rv.textContent = m && m.erreur ? "Pas de connexion" : "Vous avez la dernière version"; } };
+  $("#r-tuto").onclick = () => { d.close(); tutoriel(); };
   $("#r-notif").onchange = async e => { await api("/api/reglages", {notifications: e.target.checked}); R.notifications = e.target.checked; };
   $("#r-test").onclick = async () => { try { await api("/api/test-notif", {}); toast("Notification envoyée"); } catch (e) { toast("Les notifications sont bloquées par le système"); } };
   const eff = $("#r-eff"); if (eff) eff.onclick = async e => { e.preventDefault(); await api("/api/reglages", {effacer_serpapi: true}); R.serpapi = false; reglages(); toast("Clé retirée"); };
@@ -1125,6 +1160,66 @@ document.addEventListener("keydown", e => {
     const c = document.querySelectorAll(".carte")[+e.key - 1]; if (c) c.click();
   }
 });
+
+/* ------------------------------------------------------------ tutoriel de premier lancement */
+function tutoriel(){
+  const R = D.reglages, mac = R.systeme === "Darwin";
+  const etapes = [
+    () => `<h2>Bienvenue dans Trackflight</h2><p class="aide">Trackflight surveille le prix de vos vols et vous prévient quand il baisse. En trois minutes, tout est prêt.</p>
+      <div class="rangee"><div><b>Vos voyages</b><small>Villes, dates, voyageurs, escales : vous choisissez vos critères.</small></div></div>
+      <div class="rangee"><div><b>Chaque jour</b><small>Kayak et Momondo sont comparés automatiquement, même si l'app est fermée.</small></div></div>
+      <div class="rangee"><div><b>Une notification</b><small>Dès qu'un prix passe sous le seuil que vous avez choisi.</small></div></div>`,
+    () => `<h2>Recevoir les alertes</h2><p class="aide">Trackflight vous prévient par une notification de l'ordinateur. Vérifions qu'elle arrive bien.</p>
+      <button class="btn primary" id="t-notif" style="align-self:flex-start;font-size:16px;padding:11px 20px">Envoyer une notification de test</button>
+      <div id="t-retour" hidden>
+        <p class="aide" style="margin:8px 0 10px">Avez-vous vu la notification apparaître ?</p>
+        <div class="puces"><button type="button" class="puce" id="t-oui">Oui, je l'ai vue</button><button type="button" class="puce" id="t-non">Non, rien</button></div>
+      </div>
+      <div class="rangee" id="t-aide" hidden><div><b>Autoriser les notifications</b><small>${mac
+        ? "Ouvrez <b>Réglages Système</b> &gt; <b>Notifications</b>, cherchez <b>Éditeur de script</b> (c'est lui qui affiche les alertes de Trackflight), puis activez <b>Autoriser les notifications</b>. Réessayez ensuite."
+        : "Ouvrez <b>Paramètres</b> &gt; <b>Système</b> &gt; <b>Notifications</b> et vérifiez que les notifications sont activées, et que le mode <b>Ne pas déranger</b> est désactivé. Réessayez ensuite."}</small></div></div>`,
+    () => {
+      const ok = R.programmee, a = R.app;
+      return `<h2>Les prix se mettent à jour tout seuls</h2><p class="aide">Chaque jour à 9 h, Trackflight compare les prix de vos voyages. Si l'ordinateur était éteint, il le fait au démarrage suivant. Pas besoin d'ouvrir l'app.</p>
+      <div class="rangee"><div><b>${ok ? "Recherche automatique activée" : "Recherche automatique pas encore active"}</b><small>${ok ? "Tout est en place." : esc(a.installation || "Elle sera activée au prochain lancement de Trackflight.")}</small></div><span class="chip ${ok ? "green" : "orange"}">${ok ? "Activée" : "À vérifier"}</span></div>
+      ${mac ? `<div class="rangee"><div><b>Navigateur de recherche</b><small>${a.navigateur_pret ? "Prêt." : "Téléchargement en cours (environ 150 Mo, une seule fois). Vous pouvez continuer."}</small></div><span class="chip ${a.navigateur_pret ? "green" : "orange"}">${a.navigateur_pret ? "Prêt" : "En cours"}</span></div>` : ""}
+      <p class="aide">L'ordinateur doit être allumé et connecté à internet au moment de la recherche.</p>`;
+    },
+    () => {
+      const japon = D.projets.find(p => p.origine.code === "TYO" && p.destination.code === "PAR");
+      return `<h2>C'est prêt</h2><p class="aide">${japon ? "Un voyage vous attend déjà : <b>le retour du Japon</b>, Tokyo → Paris le 28 janvier 2027. Lancez sa première recherche, ou créez votre propre voyage avec le bouton <b>+</b>." : "Créez votre premier voyage avec le bouton <b>+</b> : quelques questions, une par écran."}</p>
+      <p class="aide">Vous pourrez revoir ce guide à tout moment dans les <b>Réglages</b>.</p>`;
+    },
+  ];
+  let i = 0, sens = 1;
+  const wiz = $("#wiz");
+  const rendre = () => {
+    const der = i === etapes.length - 1;
+    wiz.innerHTML = `<div class="wiz-top"><span></span><span class="n">${i + 1} sur ${etapes.length}</span><button class="btn link" id="t-passer">${der ? "" : "Passer"}</button></div>
+      <div class="wiz-prog"><i style="width:${Math.round(100 * (i + 1) / etapes.length)}%"></i></div>
+      <div class="wiz-body"><div class="etape ${sens > 0 ? "entre" : "recule"}">${etapes[i]()}</div></div>
+      <div class="wiz-bas"><div class="in">${i ? '<button class="btn" id="t-prec">Retour</button>' : ""}<span class="grow"></span>
+      <button class="btn primary" id="t-suite">${der ? "Commencer" : "Continuer"}</button></div></div>`;
+    $("#t-suite").onclick = () => { if (der) return finir(); sens = 1; i++; rendre(); };
+    const pr = $("#t-prec"); if (pr) pr.onclick = () => { sens = -1; i--; rendre(); };
+    const pa = $("#t-passer"); if (pa && !der) pa.onclick = finir;
+    const tn = $("#t-notif");
+    if (tn) tn.onclick = async () => {
+      tn.disabled = true; tn.textContent = "Envoi…";
+      try { await api("/api/test-notif", {}); } catch (e) { $("#t-aide").hidden = false; }
+      tn.disabled = false; tn.textContent = "Renvoyer une notification"; $("#t-retour").hidden = false;
+    };
+    const oui = $("#t-oui"); if (oui) oui.onclick = () => { $("#t-aide").hidden = true; sens = 1; i++; rendre(); };
+    const non = $("#t-non"); if (non) non.onclick = () => { $("#t-aide").hidden = false; };
+  };
+  const finir = async () => {
+    wiz.hidden = true; document.body.style.overflow = "";
+    D.reglages.accueil_vu = true;
+    await api("/api/reglages", {accueil_vu: true}).catch(() => {});
+  };
+  wiz.hidden = false; document.body.style.overflow = "hidden";
+  rendre();
+}
 
 /* ------------------------------------------------------------ démarrage */
 $("#b-nouveau").onclick = () => assistant();

@@ -18,7 +18,13 @@ Si vous aviez installé « Mes vols » (l'ancien nom), Trackflight le remplace :
 4. Ouvrez **Réglages Système > Confidentialité et sécurité**, descendez tout en bas et cliquez sur **Ouvrir quand même** à côté de « Trackflight », puis confirmez.
 5. Au tout premier lancement, Trackflight télécharge son navigateur de recherche (environ 150 Mo, quelques minutes).
 
+### Mises à jour
+Trackflight vérifie lui-même s'il existe une nouvelle version. Si oui, un bouton **Mettre à jour** apparaît en bas à gauche : un clic, et l'app se met à jour puis se rouvre. Vos voyages sont conservés.
+
+Si vous aviez une version plus ancienne (1.1.0 ou « Mes vols »), installez celle-ci une dernière fois à la main ; les suivantes se feront depuis l'app.
+
 ### Ensuite
+- Un guide s'affiche au premier lancement (notifications, recherche automatique).
 - Un voyage est déjà prêt : le retour du Japon (Tokyo → Paris, 28 janvier 2027).
 - Créez un voyage avec le bouton **+** : quelques questions, une par écran.
 - Les prix sont mis à jour chaque jour à 9 h, ou au démarrage de l'ordinateur s'il était éteint.

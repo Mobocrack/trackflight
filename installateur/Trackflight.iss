@@ -22,6 +22,7 @@ Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
 CloseApplications=yes
+RestartApplications=no
 
 [Languages]
 Name: "fr"; MessagesFile: "compiler:Languages\French.isl"
@@ -43,7 +44,7 @@ Name: "{autoprograms}\Trackflight"; Filename: "{app}\Trackflight.exe"
 Name: "{autodesktop}\Trackflight"; Filename: "{app}\Trackflight.exe"; Tasks: bureau
 
 [Run]
-Filename: "{app}\Trackflight.exe"; Description: "Ouvrir Trackflight"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\Trackflight.exe"; Description: "Ouvrir Trackflight"; Flags: nowait postinstall
 
 [UninstallRun]
 Filename: "{app}\Trackflight.exe"; Parameters: "--desinstaller"; Flags: runhidden waituntilterminated; RunOnceId: "RetirerRecherche"
