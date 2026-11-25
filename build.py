@@ -139,6 +139,45 @@ def _projet_public(p):
             "duree_max_h": p["duree_max_h"], "passagers": P.nb_passagers(p), "passagers_txt": P.passagers_txt(p)}
 
 
+def cle_vol(date, depart, compagnie, retour_depart=""):
+    """Identifie un même vol d'une recherche à l'autre (date, heure de départ, compagnie, heure du retour)."""
+    return f"{date}|{depart}|{compagnie}|{retour_depart or ''}"
+
+
+def historique_vols(p):
+    """Pour chaque vol : liste [(relevé, prix par personne)] dans l'ordre des recherches (le moins cher par relevé),
+    et la liste des relevés. Sert à repérer les nouveaux vols, les variations de prix et l'historique d'un vol."""
+    h = os.path.join(P.dossier(p), "historique.csv")
+    vols, releves = {}, []
+    if not os.path.exists(h):
+        return vols, releves
+    with open(h, encoding="utf-8") as f:
+        for r in csv.DictReader(f, delimiter=";"):
+            try:
+                prix = int(r["prix"])
+            except (TypeError, ValueError, KeyError):
+                continue
+            rel = r["releve"]
+            if rel not in releves:
+                releves.append(rel)
+            k = cle_vol(r["date"], r["depart"], r["compagnie"], r.get("retour_depart", ""))
+            serie = vols.setdefault(k, [])
+            if serie and serie[-1][0] == rel:
+                serie[-1] = (rel, min(serie[-1][1], prix))
+            else:
+                serie.append((rel, prix))
+    return vols, releves
+
+
+def suivi(v, vols, releves, courant):
+    """Ajoute au vol : nouveau (absent des recherches précédentes), variation (depuis la recherche précédente), historique."""
+    serie = vols.get(cle_vol(v["date"], v["depart"], v["compagnie"], (v.get("retour") or {}).get("depart", "")), [])
+    v["histo_prix"] = [{"releve": r, "prix": x} for r, x in serie[-8:]]
+    precedents = [x for x in serie if x[0] != courant]
+    v["nouveau"] = len(releves) > 1 and not precedents
+    v["variation"] = v["prix"] - precedents[-1][1] if precedents and serie and serie[-1][0] == courant else 0
+
+
 def donnees_voyage(p):
     """Tout ce que l'interface affiche pour un voyage (None s'il n'a pas encore été relevé)."""
     d = derniers(p)
@@ -146,8 +185,11 @@ def donnees_voyage(p):
         return None
     champs = ("date", "compagnie", "depart", "arrivee", "aeroports", "duree", "escales", "via", "escale_detail",
               "prix", "prix_total", "prix_max", "source", "lien", "site", "autonome", "ok", "retour", "obs",
-              "formalites", "logo", "jeton_retour", "retours", "retour_choisi")
+              "formalites", "logo", "jeton_retour", "retours", "retour_choisi", "nouveau", "variation", "histo_prix")
     vols = consolider(p, d["vols"])
+    hv, releves = historique_vols(p)
+    for v in vols:
+        suivi(v, hv, releves, d["releve"])
     return {"projet": _projet_public(p), "releve": d["releve"], "sources": d.get("sources", "Kayak"),
             "histo": historique(p), "vols": [{k: v.get(k) for k in champs} for v in vols], "liens": P.liens(p),
             "repere": repere_google(p)}

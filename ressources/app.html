@@ -158,6 +158,17 @@ select.plain{border:0;background:var(--fill);border-radius:8px;padding:6px 10px;
 .r-info span{font-size:13px;color:var(--text-2)}
 .r-price{text-align:right;font:600 17px var(--font-display);letter-spacing:-.01em}
 .r-price small{display:block;font:400 11.5px var(--font);color:var(--text-2)}
+.r-info .alerte,.hero-notes .alerte{color:var(--orange)}
+.evo{font:500 12px var(--font);color:var(--text-2)}
+.r-price .evo{display:block}
+.evo.baisse{color:var(--green)}
+.evo.hausse{color:var(--red)}
+.evo.nouveau{color:var(--accent)}
+.leg-title .cie{text-transform:none;letter-spacing:0;font-weight:500;color:var(--text-2);margin-left:8px}
+.leg-title .cie .logo-cie{width:14px;height:14px;margin-right:4px;vertical-align:-2px}
+.hero-notes{margin:0;font-size:13px;color:var(--text-2);line-height:1.5}
+.histo-vol{flex-basis:100%;margin:4px 0 0;font-size:13px;color:var(--text-2)}
+.histo-vol b{font-weight:600;color:var(--text)}
 .row-more{display:none;padding:0 18px 14px;gap:8px;flex-wrap:wrap}
 .retour-dem{flex-basis:100%;display:flex;flex-direction:column;gap:6px;margin-top:6px;font-size:13.5px}
 .retour-opt{display:grid;grid-template-columns:minmax(120px,1fr) 2fr auto;gap:10px;align-items:center;padding:6px 10px;border-radius:10px;background:var(--fill)}
@@ -579,19 +590,28 @@ function legHTML(t){
   const st = (t.via || "").split(",").map(s => s.trim()).filter(Boolean);
   return `<div class="leg">
     <div class="pt"><span class="time">${tempsHTML(t.depart)}</span><span class="code">${esc(a)}</span></div>
-    <div class="track">${st.map((s,i) => { const x = (i+1)/(st.length+1)*100; return `<span class="dot" style="left:${x}%"></span><span class="lab" style="left:${x}%">${esc(s)}</span>`; }).join("")}<span class="d">${dur(t.duree)}${st.length ? "" : " · direct"}</span></div>
+    <div class="track">${st.map((s,i) => { const x = (i+1)/(st.length+1)*100; const d = (t.escale_detail || "").split(" / ")[i]; return `<span class="dot" style="left:${x}%"></span><span class="lab" style="left:${x}%">${esc(s)}${d && st.length === (t.escale_detail || "").split(" / ").length ? " · " + esc(d) : ""}</span>`; }).join("")}<span class="d">${dur(t.duree)}${st.length ? "" : " · direct"}</span></div>
     <div class="pt end"><span class="time">${tempsHTML(t.arrivee)}</span><span class="code">${esc(b)}</span></div>
   </div>`;
 }
 /* Logo de la compagnie (fourni par Google Flights) ; rien si absent ou s'il ne se charge pas. */
 const logo = v => v.logo ? `<img class="logo-cie" src="${esc(v.logo)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : "";
-function badges(v, ligne=false){
-  return [direct(v) && !ligne ? '<span class="chip green">Direct</span>' : "",
-    v.depart < "05:00" ? '<span class="chip orange">Part la nuit précédente</span>' : "",
-    v.autonome ? '<span class="chip orange">Billets séparés</span>' : "",
-    v.retour_choisi ? `<span class="chip" title="Retour choisi par vous ; la prochaine recherche reprend le choix automatique.">Retour choisi</span>` : "",
-    v.jeton_retour && !v.retour ? `<span class="chip" title="Le vol retour n'a pas encore été détaillé : ouvrez la ligne pour le voir (durée et escales du retour non vérifiées).">Retour à voir</span>` : "",
-    ...(v.formalites || []).map(f => `<span class="chip orange" title="${esc(f.long)}. Pour un passeport français ; vérifiez sur le site officiel avant de réserver.">${esc(ligne ? f.court : f.long)}</span>`)].join("");
+/* Remarques sur un vol, en texte simple (pas de pastilles). Seules les alertes utiles sont en orange. */
+function notes(v, long=false){
+  const n = [];
+  (v.formalites || []).forEach(f => n.push([long ? f.long : f.court, true]));
+  if (v.autonome) n.push([long ? "Billets séparés : pas de garantie en cas de retard" : "billets séparés", true]);
+  if (v.depart < "05:00") n.push(["part la veille au soir", false]);
+  if (v.retour_choisi) n.push(["retour choisi par vous", false]);
+  if (v.jeton_retour && !v.retour) n.push(["retour à voir", false]);
+  return n;
+}
+const notesHTML = (v, long=false) => notes(v, long).map(([t, a]) => a ? `<span class="alerte">${esc(t)}</span>` : esc(t));
+/* Évolution depuis la recherche précédente : nouveau vol, ou baisse / hausse du prix. */
+function evolution(v){
+  if (v.nouveau) return `<small class="evo nouveau">nouveau</small>`;
+  if (v.variation) return `<small class="evo ${v.variation < 0 ? "baisse" : "hausse"}">${v.variation < 0 ? "−" : "+"}${eur(Math.abs(v.variation))}</small>`;
+  return "";
 }
 /* Repère de Google Flights : le prix est-il bas, normal ou élevé pour ce trajet, et comment a-t-il évolué ces dernières semaines.
    Google donne des prix pour l'ensemble des voyageurs : on les ramène au prix par personne, comme le reste de l'app. */
@@ -637,13 +657,14 @@ function corps(p, V){
         <span class="eyebrow">Meilleur prix aujourd'hui</span>
         <div class="big num" id="prix-big" data-v=""><span>${Math.round(c.prix).toLocaleString("fr-FR")}</span><small>€</small></div>
         <span class="muted">${V.projet.passagers > 1 ? `par personne, ${eur(c.prix_total)} pour ${V.projet.passagers}` : "par personne"} · sur ${esc(c.source)}</span>
+        ${c.nouveau ? `<span class="evo nouveau">Nouveau depuis la dernière recherche</span>` : c.variation ? `<span class="evo ${c.variation < 0 ? "baisse" : "hausse"}">${c.variation < 0 ? "En baisse de " : "En hausse de "}${eur(Math.abs(c.variation))} depuis la dernière recherche</span>` : ""}
         <a class="btn primary" href="${esc(c.lien)}" target="_blank" rel="noopener">Voir l'offre ↗</a>
       </div>
       <div class="hero-flight">
-        ${c.retour ? `<span class="leg-title">Aller · ${esc(jour(c.date,{weekday:"long",day:"numeric",month:"long"}))}</span>` : `<span class="leg-title">${esc(jour(c.date,{weekday:"long",day:"numeric",month:"long"}))}</span>`}
+        <span class="leg-title">${c.retour ? "Aller · " : ""}${esc(jour(c.date,{weekday:"long",day:"numeric",month:"long"}))}<span class="cie">${logo(c)}${esc(c.compagnie)}</span></span>
         ${legHTML(c)}
-        ${c.retour ? `<span class="leg-title">Retour · ${esc(jour(c.retour.date,{weekday:"long",day:"numeric",month:"long"}))}</span>${legHTML(c.retour)}` : c.jeton_retour ? `<button class="btn" style="align-self:flex-start" data-retour data-id="${esc(p.id)}" data-date="${esc(c.date)}" data-jeton="${esc(c.jeton_retour)}">Voir le vol retour</button>` : ""}
-        <div class="chips"><span class="chip">${logo(c)}${esc(c.compagnie)}</span>${c.retour && c.retour.compagnie !== c.compagnie ? `<span class="chip">${logo(c.retour)}Retour : ${esc(c.retour.compagnie)}</span>` : ""}${c.escale_detail ? `<span class="chip">Escale ${esc(c.escale_detail)}</span>` : ""}${badges(c)}</div>
+        ${c.retour ? `<span class="leg-title">Retour · ${esc(jour(c.retour.date,{weekday:"long",day:"numeric",month:"long"}))}<span class="cie">${logo(c.retour)}${esc(c.retour.compagnie)}</span></span>${legHTML(c.retour)}` : c.jeton_retour ? `<button class="btn" style="align-self:flex-start" data-retour data-id="${esc(p.id)}" data-date="${esc(c.date)}" data-jeton="${esc(c.jeton_retour)}">Voir le vol retour</button>` : ""}
+        ${notes(c, true).length ? `<p class="hero-notes">${notesHTML(c, true).join("<br>")}</p>` : ""}
       </div>
     </section>`;
     const val = v => v.prix + ((v.duree + (v.retour ? v.retour.duree : 0)) / 60) * 25;
@@ -684,11 +705,18 @@ function ligneVol(v, i, p){
     <button class="row-main" aria-expanded="false">
       <span class="r-time">${tempsHTML(v.depart)} → ${tempsHTML(v.arrivee)}${r ? `<span class="ret">${tempsHTML(r.depart)} → ${tempsHTML(r.arrivee)}</span>` : ""}</span>
       <span class="r-dur">${dur(v.duree)}${r ? `<span class="ret">${dur(r.duree)}</span>` : ""}</span>
-      <span class="r-info"><b>${logo(v)}${esc(v.compagnie)}</b><span>${esc(jour(v.date))} · ${v.escales ? `${v.escales} escale${v.escales>1?"s":""} à ${esc(v.via)}` : "direct"}${r ? ` · retour ${r.escales ? "via " + esc(r.via) : "direct"}` : ""}</span> <span class="chips" style="display:inline-flex;margin-left:4px">${badges(v, true)}</span></span>
-      <span class="r-price">${eur(v.prix)}${n > 1 ? `<small>${eur(v.prix_total)} au total</small>` : ""}</span>
+      <span class="r-info"><b>${logo(v)}${esc(v.compagnie)}</b><span>${[esc(jour(v.date)), v.escales ? `${v.escales} escale${v.escales>1?"s":""} à ${esc(v.via)}` : "direct", ...(r ? [`retour ${r.escales ? "via " + esc(r.via) : "direct"}`] : []), ...notesHTML(v)].join(" · ")}</span></span>
+      <span class="r-price">${eur(v.prix)}${evolution(v)}${n > 1 ? `<small>${eur(v.prix_total)} au total</small>` : ""}</span>
     </button>
-    <div class="row-more">${obs.map((o, k) => `<a class="offer${k === 0 && obs.length > 1 ? " best" : ""}" href="${esc(o.lien)}" target="_blank" rel="noopener"><span>${esc(o.source)} ↗</span><b>${eur(o.prix)}</b></a>`).join("")}${retourHTML(v, p)}</div>
+    <div class="row-more">${obs.map((o, k) => `<a class="offer${k === 0 && obs.length > 1 ? " best" : ""}" href="${esc(o.lien)}" target="_blank" rel="noopener"><span>${esc(o.source)} ↗</span><b>${eur(o.prix)}</b></a>`).join("")}${histoVolHTML(v)}${retourHTML(v, p)}</div>
   </div>`;
+}
+/* Prix de ce vol lors des recherches précédentes. */
+function histoVolHTML(v){
+  const h = v.histo_prix || [];
+  if (h.length < 2) return v.nouveau ? `<p class="histo-vol">Vol apparu à la dernière recherche.</p>` : "";
+  const jourCourt = r => { const [d, m] = r.split(" ")[0].split("/"); return new Date(2000, +m - 1, +d).toLocaleDateString("fr-FR", {day:"numeric", month:"short"}); };
+  return `<p class="histo-vol">Prix de ce vol : ${h.map(x => `${esc(jourCourt(x.releve))} <b>${eur(x.prix)}</b>`).join(" · ")}</p>`;
 }
 /* Aller-retour : le détail du vol retour (automatique pour les meilleures offres, sinon à la demande : 1 recherche). */
 function retourHTML(v, p){

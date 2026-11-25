@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 1.3.6 (25/11/2026)
+
+- Affichage plus sobre : plus de pastilles sur la carte du meilleur prix ni dans la liste. La compagnie est écrite à côté de chaque trajet, la durée d'escale sur la ligne du trajet, les remarques en texte simple ; seules les alertes utiles (ESTA, AVE, ETA, billets séparés) sont en orange.
+- Nouveau : évolution depuis la recherche précédente, sous le prix de chaque vol (« −16 € » en vert, « +12 € » en rouge, « nouveau » en bleu) et sur la carte du meilleur prix.
+- Nouveau : dans le détail d'un vol, ses prix lors des dernières recherches (jusqu'à 8).
+
 ## 1.3.5 (25/11/2026)
 
 - Aller-retour : dans le détail d'un vol, un clic sur un autre retour de la liste le choisit (même hors critères, par exemple plus court ou d'une autre compagnie). Le prix, les badges (ESTA, AVE, ETA) et la carte du meilleur prix suivent ce choix. Aucun crédit utilisé.
