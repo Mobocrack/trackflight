@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 1.2.4 (25/11/2026)
+
+- Alertes plus claires : les montants sont indiqués « par personne » (le prix d'un billet), avec le total pour le groupe quand il y a plusieurs voyageurs (par exemple « 600 € par personne, soit 1 800 € pour vos 3 voyageurs »), dans le questionnaire et dans la fiche de modification.
+
 ## 1.2.3 (25/11/2026)
 
 - Nouveau : Réglages > Journal des recherches, affiché en temps réel (les plus récentes en haut, erreurs en rouge) avec un bouton « Copier ». Les clés et le dossier personnel y sont masqués.

@@ -771,10 +771,10 @@ function editer(p, copie=false){
     </div></div>
 
     <div><div class="grp-title">Alertes</div><div class="grp">
-      <div class="cell"><label for="e-se">Prévenir si un vol avec escale passe sous</label><input type="number" id="e-se" min="0" step="10" placeholder="Jamais" inputmode="numeric"></div>
-      <div class="cell"><label for="e-sd">Prévenir si un vol direct passe sous</label><input type="number" id="e-sd" min="0" step="10" placeholder="Jamais" inputmode="numeric"></div>
-      <div class="cell"><label for="e-bm">Prévenir si un prix baisse d'au moins</label><input type="number" id="e-bm" min="0" step="5" placeholder="Jamais" inputmode="numeric"></div>
-    </div><p class="foot-note">Montants en euros par personne. Une notification apparaît sur cet ordinateur.</p></div>
+      <div class="cell"><label for="e-se">Prévenir si un vol avec escale passe sous (€ par personne)</label><input type="number" id="e-se" min="0" step="10" placeholder="Jamais" inputmode="numeric"></div>
+      <div class="cell"><label for="e-sd">Prévenir si un vol direct passe sous (€ par personne)</label><input type="number" id="e-sd" min="0" step="10" placeholder="Jamais" inputmode="numeric"></div>
+      <div class="cell"><label for="e-bm">Prévenir si un prix baisse d'au moins (€ par personne)</label><input type="number" id="e-bm" min="0" step="5" placeholder="Jamais" inputmode="numeric"></div>
+    </div><p class="foot-note" id="e-alertes-note">Montants par personne, c'est-à-dire pour un seul billet. Une notification apparaît sur cet ordinateur.</p></div>
 
     <div><div class="grp-title">Nom</div><div class="grp">
       <div class="cell"><label for="e-nom">Nom du voyage</label><input type="text" id="e-nom" maxlength="60" placeholder="Automatique"></div>
@@ -796,6 +796,11 @@ function editer(p, copie=false){
   lier("#e-sep", (v, el) => B.billets_separes = el.checked, "change");
   lier("#e-se", v => B.alertes.seuil_escale = v === "" ? null : +v); lier("#e-sd", v => B.alertes.seuil_direct = v === "" ? null : +v);
   lier("#e-bm", v => B.alertes.baisse_min = v === "" ? null : +v); lier("#e-nom", v => B.nom = v);
+  const noteAlertes = () => { const n = nPass(B), s = B.alertes.seuil_escale || B.alertes.seuil_direct;
+    $("#e-alertes-note").textContent = "Montants par personne, c'est-à-dire pour un seul billet." + (n > 1
+      ? ` Pour vos ${n} voyageurs, multipliez par ${n}${s ? ` (${eur(s)} par personne = ${eur(s * n)} au total)` : ""}.` : "")
+      + " Une notification apparaît sur cet ordinateur."; };
+  f.oninput = noteAlertes; f.onclick = () => setTimeout(noteAlertes); noteAlertes();
   f.querySelectorAll(".stepper").forEach(s => s.addEventListener("click", e => { const d = +(e.target.closest("button") || {}).dataset?.d; if (!d) return;
     const k = s.dataset.k, v = B[k] + d, autres = nPass(B) - B[k];
     if (v < (k === "adultes" ? 1 : 0) || v + autres > 9 || (k === "bebes" && v > B.adultes) || (k === "adultes" && v < B.bebes)) return;
@@ -1152,9 +1157,9 @@ function contenu(id, p){
       <p class="aide" style="margin-top:8px">Durée maximale d'un trajet</p>
       <div class="puces" id="w-dmax">${[[null,"Peu importe"],[12,"12 h"],[16,"16 h"],[21,"21 h"],[24,"24 h"]].map(([v,t]) => `<button type="button" class="puce" data-v="${v ?? ""}" aria-pressed="${(p.duree_max_h ?? null) === v}">${t}</button>`).join("")}</div>
       <label class="rangee" style="cursor:pointer"><div><b>Accepter les billets séparés</b><small>Moins chers, mais sans garantie si un vol a du retard</small></div><span class="toggle"><input type="checkbox" id="w-sep" ${p.billets_separes ? "checked" : ""}><span class="switch"></span></span></label>`;
-    case "alertes": return `<h2>Quand voulez-vous être prévenu ?</h2><p class="aide">Une notification apparaît sur cet ordinateur. Les montants sont par personne.</p>
-      <label class="rangee" style="cursor:pointer"><div><b>Quand un prix baisse</b><small>D'au moins <input type="number" id="w-baisse" value="${p.alertes.baisse_min ?? 30}" min="5" step="5" style="width:64px;border:0;background:var(--fill);border-radius:6px;padding:2px 6px;text-align:right"> €</small></div><span class="toggle"><input type="checkbox" id="w-a-baisse" ${W.alerte.baisse ? "checked" : ""}><span class="switch"></span></span></label>
-      <label class="rangee" style="cursor:pointer"><div><b>Quand un vol passe sous un prix</b><small>Sous <input type="number" id="w-seuil" value="${p.alertes.seuil_escale ?? ""}" min="0" step="10" placeholder="500" style="width:72px;border:0;background:var(--fill);border-radius:6px;padding:2px 6px;text-align:right"> €</small></div><span class="toggle"><input type="checkbox" id="w-a-seuil" ${W.alerte.seuil ? "checked" : ""}><span class="switch"></span></span></label>`;
+    case "alertes": return `<h2>Quand voulez-vous être prévenu ?</h2><p class="aide">Une notification apparaît sur cet ordinateur. Les montants sont <b>par personne</b> (le prix d'un billet${p.type === "ar" ? " aller-retour" : ""}).</p>
+      <label class="rangee" style="cursor:pointer"><div><b>Quand un prix baisse</b><small>D'au moins <input type="number" id="w-baisse" value="${p.alertes.baisse_min ?? 30}" min="5" step="5" style="width:64px;border:0;background:var(--fill);border-radius:6px;padding:2px 6px;text-align:right"> € par personne<span class="w-total" id="w-baisse-total"></span></small></div><span class="toggle"><input type="checkbox" id="w-a-baisse" ${W.alerte.baisse ? "checked" : ""}><span class="switch"></span></span></label>
+      <label class="rangee" style="cursor:pointer"><div><b>Quand un vol passe sous un prix</b><small>Sous <input type="number" id="w-seuil" value="${p.alertes.seuil_escale ?? ""}" min="0" step="10" placeholder="500" style="width:72px;border:0;background:var(--fill);border-radius:6px;padding:2px 6px;text-align:right"> € par personne<span class="w-total" id="w-seuil-total"></span></small></div><span class="toggle"><input type="checkbox" id="w-a-seuil" ${W.alerte.seuil ? "checked" : ""}><span class="switch"></span></span></label>`;
     case "recap": {
       const auto = `${p.destination.nom.replace(/ \(.*\)$/, "")} ${new Date(p.date_aller + "T12:00:00").toLocaleDateString("fr-FR", {month:"long", year:"numeric"})}`;
       return `<h2>Tout est prêt</h2><p class="recap">${phrase(p)}</p>
@@ -1182,7 +1187,9 @@ function brancherEtape(id, p){
   if (id === "alertes") {
     const sync = () => { W.alerte.baisse = $("#w-a-baisse").checked; W.alerte.seuil = $("#w-a-seuil").checked;
       p.alertes.baisse_min = W.alerte.baisse ? (+$("#w-baisse").value || 30) : null;
-      const s = +$("#w-seuil").value || null; p.alertes.seuil_escale = W.alerte.seuil ? s : null; p.alertes.seuil_direct = W.alerte.seuil ? s : null; };
+      const s = +$("#w-seuil").value || null; p.alertes.seuil_escale = W.alerte.seuil ? s : null; p.alertes.seuil_direct = W.alerte.seuil ? s : null;
+      const n = nPass(p), groupe = (id, v) => { $(id).textContent = n > 1 && v ? `, soit ${eur(v * n)} pour vos ${n} voyageurs` : ""; };
+      groupe("#w-baisse-total", +$("#w-baisse").value); groupe("#w-seuil-total", s); };
     ["#w-a-baisse", "#w-a-seuil"].forEach(x => $(x).onchange = sync);
     $("#w-baisse").oninput = sync; $("#w-seuil").oninput = () => { $("#w-a-seuil").checked = !!$("#w-seuil").value; sync(); }; sync(); }
   if (id === "recap") { const n = $("#w-nom"); n.oninput = () => p.nom = n.value; setTimeout(() => n.focus(), 80); }
