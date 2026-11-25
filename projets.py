@@ -44,9 +44,22 @@ def completer(p):
     return q
 
 
+PRESETS = [{
+    "id": "japon-retour-2027", "nom": "Retour du Japon",
+    "origine": {"code": "TYO", "nom": "Tokyo", "aeroports": "HND,NRT"},
+    "destination": {"code": "PAR", "nom": "Paris", "aeroports": "CDG,ORY"},
+    "type": "aller", "date_aller": "2027-01-28", "flex": 1, "duree_max_h": 21,
+    "alertes": {"seuil_escale": 450, "seuil_direct": 1000, "baisse_min": 30,
+                "plafond_baisse_escale": 700, "plafond_baisse_direct": 1200},
+}]
+
+
 def charger():
     if not os.path.exists(FICHIER):
-        return []
+        # Premier lancement : voyages déjà préparés (seulement si leur date n'est pas passée).
+        depart = [completer(p) for p in PRESETS if p["date_aller"] >= dt.date.today().isoformat()]
+        enregistrer(depart)
+        return depart
     with open(FICHIER, encoding="utf-8") as f:
         return [completer(p) for p in json.load(f).get("projets", [])]
 

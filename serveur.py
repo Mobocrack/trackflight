@@ -88,7 +88,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._envoyer(403, {"erreur": "Accès refusé."})
         chemin = self.path.split("?")[0]
         if chemin == "/api/ping":
-            return self._envoyer(200, {"app": "mesvols"})
+            return self._envoyer(200, {"app": "trackflight"})
         if chemin == "/":
             with open(chemins.ressources("app.html"), encoding="utf-8") as f:
                 return self._envoyer(200, page_html(f.read()), "text/html; charset=utf-8")
@@ -109,6 +109,10 @@ class Gestionnaire(BaseHTTPRequestHandler):
             p = next((x for x in P.charger() if x["id"] == pid), None)
             d = build.donnees_voyage(p) if p else None
             return self._envoyer(200, d or {"vide": True})
+        if chemin == "/api/aeroports":
+            with open(chemins.ressources("aeroports.json"), "rb") as f:
+                return self._envoyer(200, f.read(), "application/json; charset=utf-8",
+                                     {"Cache-Control": "max-age=86400"})
         if chemin.startswith("/excel/"):
             pid = chemin[len("/excel/"):].strip("/")
             p = next((x for x in P.charger() if x["id"] == pid), None)
@@ -129,7 +133,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
     def do_POST(self):
         ETAT["derniere_activite"] = time.time()
         # Un autre site ne peut pas envoyer cet en-tête sans autorisation (que ce serveur ne donne jamais).
-        if not self._hote_ok() or self.headers.get("X-Mes-Vols") != "1":
+        if not self._hote_ok() or self.headers.get("X-Trackflight") != "1":
             return self._envoyer(403, {"erreur": "Accès refusé."})
         try:
             n = int(self.headers.get("Content-Length", 0))
@@ -174,17 +178,54 @@ class Gestionnaire(BaseHTTPRequestHandler):
             releve.sauver_config(cfg)
             return self._envoyer(200, {"ok": True, "serpapi": bool(cfg["serpapi_cle"]), "notifications": cfg["notifications"]})
 
+        if chemin == "/api/afficher":
+            import fenetre
+            return self._envoyer(200, {"fenetre": fenetre.montrer()})
+
+        if chemin == "/api/excel":
+            p = next((x for x in P.charger() if x["id"] == corps.get("id")), None)
+            fichier = build.excel(p) if p else None
+            if not fichier:
+                return self._envoyer(404, {"erreur": "Pas encore de prix pour ce voyage."})
+            dest = vers_telechargements(fichier, p["nom"])
+            ouvrir_fichier(dest)
+            return self._envoyer(200, {"ok": True, "chemin": dest})
+
         if chemin == "/api/test-notif":
-            ok = notif.envoyer("Mes vols", "Les notifications fonctionnent. Vous serez prévenu quand un prix vous intéresse.")
+            ok = notif.envoyer("Trackflight", "Les notifications fonctionnent. Vous serez prévenu quand un prix vous intéresse.")
             return self._envoyer(200 if ok else 502, {"ok": ok})
 
         self._envoyer(404, {"erreur": "Action inconnue."})
 
 
+def vers_telechargements(fichier, nom):
+    import re
+    import shutil
+    dossier = os.path.join(os.path.expanduser("~"), "Downloads")
+    if not os.path.isdir(dossier):
+        dossier = os.path.expanduser("~")
+    base = re.sub(r'[\\/:*?"<>|]+', " ", f"Trackflight - {nom}").strip()
+    dest, n = os.path.join(dossier, base + ".xlsx"), 2
+    while os.path.exists(dest):
+        dest, n = os.path.join(dossier, f"{base} ({n}).xlsx"), n + 1
+    shutil.copyfile(fichier, dest)
+    return dest
+
+
+def ouvrir_fichier(chemin):
+    try:
+        if chemins.SYSTEME == "Windows":
+            os.startfile(chemin)
+        elif chemins.SYSTEME == "Darwin":
+            subprocess.Popen(["open", chemin])
+    except OSError:
+        pass
+
+
 def deja_lance():
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/api/ping", timeout=2) as r:
-            return json.load(r).get("app") == "mesvols"
+            return json.load(r).get("app") == "trackflight"
     except Exception:
         return False
 
@@ -198,11 +239,24 @@ def surveiller(serveur):
 
 
 def preparer():
-    if os.environ.get("MESVOLS_SANS_INSTALLATION"):  # tests
+    if os.environ.get("TRACKFLIGHT_SANS_INSTALLATION"):  # tests
         return
     ok, msg = installation.installer()
     ETAT["installation"] = None if ok else msg
     navigateur.installer_en_fond()
+
+
+def demarrer(surveiller_inactivite=True):
+    """Démarre le serveur dans un fil d'exécution et le renvoie (None si le port est déjà pris)."""
+    try:
+        serveur = ThreadingHTTPServer(("127.0.0.1", PORT), Gestionnaire)
+    except OSError:
+        return None
+    threading.Thread(target=serveur.serve_forever, daemon=True).start()
+    threading.Thread(target=preparer, daemon=True).start()
+    if surveiller_inactivite:
+        threading.Thread(target=surveiller, args=(serveur,), daemon=True).start()
+    return serveur
 
 
 def lancer(ouvrir=True):

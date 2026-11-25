@@ -26,7 +26,7 @@ PROGRESSION = os.path.join(DONNEES, "progression.json")
 
 logging.basicConfig(filename=os.path.join(DONNEES, "journal.log"), level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(message)s", encoding="utf-8")
-log = logging.getLogger("mesvols")
+log = logging.getLogger("trackflight")
 
 DEFAUT = {
     "sources": ["kayak", "momondo", "google"],
@@ -280,7 +280,7 @@ def executer(projet=None, si_besoin=False):
             ecrire_json(os.path.join(P.dossier(p), "etat.json"), etat_p)
             log.info("[%s] %d vols, %d alertes", p["id"], len(vols), len(n))
         if actifs and not total and cfg["notifications"]:
-            notif.envoyer("Mes vols : recherche impossible",
+            notif.envoyer("Trackflight : recherche impossible",
                           "Aucun site n'a répondu. Vérifiez la connexion internet ; la recherche sera refaite demain.")
         if not projet:
             etat["dernier_releve"] = time.time()

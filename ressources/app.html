@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Mes vols</title>
+<title>Trackflight</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Crect width=%2264%22 height=%2264%22 rx=%2214%22 fill=%22%230071e3%22/%3E%3Cpath d=%22M14 38l36-14-8 22-7-7-6 6v-8z%22 fill=%22white%22/%3E%3C/svg%3E">
 <style>
-/* Mes vols : une fenêtre façon app Apple. Voyages à gauche, le voyage choisi à droite, le prix d'abord.
+/* Trackflight : une fenêtre façon app Apple. Voyages à gauche, le voyage choisi à droite, le prix d'abord.
    Polices du système (San Francisco sur Mac, Segoe UI Variable sur Windows), aucun fichier externe. */
 :root{
   --bg:#f5f5f7; --side:rgba(236,236,240,.82); --surface:#ffffff; --fill:rgba(118,118,128,.12); --fill-2:rgba(118,118,128,.08);
@@ -235,6 +235,75 @@ dialog[open] .sheet{animation:feuille .42s var(--ease)}
 .toast{position:fixed;left:50%;bottom:max(24px,env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);opacity:0;background:color-mix(in srgb,var(--text) 92%,transparent);color:var(--bg);padding:10px 18px;border-radius:980px;font-size:14px;font-weight:500;transition:.35s var(--ease);pointer-events:none;z-index:50;white-space:nowrap}
 .toast.show{opacity:1;transform:translate(-50%,0)}
 
+/* ------------- résultats de recherche de lieux */
+.lieu{width:100%;border:0;background:transparent;text-align:left;border-radius:10px;padding:9px 10px;display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:2px 10px;align-items:center;color:var(--text)}
+.lieu .ic{grid-row:1/3;width:28px;height:28px;border-radius:8px;background:var(--fill-2);display:grid;place-items:center;color:var(--text-2)}
+.lieu .ic svg{width:15px;height:15px}
+.lieu b{font-weight:500;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lieu small{grid-column:2;font-size:12.5px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lieu .cd{grid-row:1/3;grid-column:3;font:600 12.5px var(--font);color:var(--text-2);letter-spacing:.03em}
+.lieu[aria-selected="true"]{background:var(--accent);color:#fff}
+.lieu[aria-selected="true"] small,.lieu[aria-selected="true"] .cd{color:rgba(255,255,255,.85)}
+.lieu[aria-selected="true"] .ic{background:rgba(255,255,255,.2);color:#fff}
+.lieux-titre{font-size:12px;font-weight:600;color:var(--text-2);padding:8px 10px 4px}
+
+/* ------------- questionnaire de création (une question par écran) */
+.wiz{position:fixed;inset:0;z-index:40;background:var(--bg);display:flex;flex-direction:column}
+.wiz-top{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:14px max(20px,env(safe-area-inset-left,0px)) 10px}
+.wiz-top .n{font-size:13px;color:var(--text-2);text-align:center}
+.wiz-top .btn:last-child{justify-self:end}
+.wiz-prog{height:3px;background:var(--fill-2)}
+.wiz-prog i{display:block;height:100%;background:var(--accent);transition:width .5s var(--ease)}
+.wiz-body{flex:1;overflow:auto;display:flex;justify-content:center;padding:6vh 24px 40px}
+.etape{width:min(680px,100%);display:flex;flex-direction:column;gap:22px}
+.etape.entre{animation:entre .5s var(--ease) both}
+.etape.recule{animation:recule .5s var(--ease) both}
+@keyframes entre{from{opacity:0;transform:translateX(36px)}}
+@keyframes recule{from{opacity:0;transform:translateX(-36px)}}
+.etape h2{font:700 clamp(30px,4.4vw,44px)/1.08 var(--font-display);letter-spacing:-.03em;margin:0;text-wrap:balance}
+.etape .aide{color:var(--text-2);font-size:17px;margin:-8px 0 0;max-width:52ch}
+.grand{width:100%;border:0;border-bottom:2px solid var(--sep);background:transparent;font:500 clamp(24px,3.4vw,32px)/1.3 var(--font-display);letter-spacing:-.02em;padding:6px 0 10px;outline:none;color:var(--text);transition:border-color .2s}
+.grand:focus{border-bottom-color:var(--accent)}
+.grand::placeholder{color:var(--text-3)}
+.resultats{display:grid;gap:2px;max-height:46vh;overflow:auto;margin-top:-8px}
+.choisi{display:flex;align-items:center;gap:14px;background:var(--surface);border-radius:16px;box-shadow:var(--shadow);padding:16px 18px}
+.choisi .code{font:700 30px var(--font-display);letter-spacing:.02em;color:var(--accent)}
+.choisi div{flex:1;min-width:0}
+.choisi b{display:block;font-size:17px}
+.choisi small{color:var(--text-2)}
+.idees{display:flex;flex-wrap:wrap;gap:8px}
+.idees button{border:0;background:var(--surface);box-shadow:var(--shadow);border-radius:980px;padding:8px 14px;font-size:14.5px}
+.idees button:hover{background:var(--accent);color:#fff}
+.cartes{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.carte{border:1.5px solid transparent;background:var(--surface);box-shadow:var(--shadow);border-radius:18px;padding:20px 18px;text-align:left;display:grid;gap:6px;color:var(--text);transition:transform .15s var(--ease),border-color .15s}
+.carte:hover{transform:translateY(-2px)}
+.carte[aria-pressed="true"]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 7%,var(--surface))}
+.carte b{font:600 19px var(--font-display);letter-spacing:-.01em}
+.carte span{font-size:14px;color:var(--text-2)}
+.carte .ic{width:36px;height:36px;border-radius:10px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;margin-bottom:6px}
+.carte .ic svg{width:20px;height:20px}
+.carte .touche{justify-self:start;font:600 11px var(--font);color:var(--text-3);border:1px solid var(--sep);border-radius:5px;padding:1px 6px;margin-top:4px}
+.puces{display:flex;flex-wrap:wrap;gap:8px}
+.puce{border:1.5px solid transparent;background:var(--surface);box-shadow:var(--shadow);border-radius:980px;padding:9px 16px;font-size:15px;font-weight:500;color:var(--text)}
+.puce[aria-pressed="true"]{border-color:var(--accent);color:var(--accent-text);background:color-mix(in srgb,var(--accent) 7%,var(--surface))}
+.date-grande{font:500 26px var(--font-display);border:0;border-bottom:2px solid var(--sep);background:transparent;padding:6px 0 10px;color:var(--text);outline:none;max-width:320px}
+.date-grande:focus{border-bottom-color:var(--accent)}
+.rangee{display:flex;align-items:center;justify-content:space-between;gap:16px;background:var(--surface);box-shadow:var(--shadow);border-radius:16px;padding:16px 18px}
+.rangee b{font-size:17px;font-weight:600;display:block}
+.rangee small{color:var(--text-2)}
+.compteur{display:flex;align-items:center;gap:14px}
+.compteur button{width:40px;height:40px;border-radius:50%;border:0;background:var(--fill);font-size:22px;color:var(--text);display:grid;place-items:center}
+.compteur button:disabled{opacity:.3}
+.compteur output{min-width:28px;text-align:center;font:600 24px var(--font-display)}
+.recap{font:500 clamp(22px,3vw,28px)/1.35 var(--font-display);letter-spacing:-.02em;color:var(--text-2)}
+.recap b{color:var(--text)}
+.wiz-bas{display:flex;align-items:center;gap:14px;padding:14px max(24px,env(safe-area-inset-right,0px)) max(18px,env(safe-area-inset-bottom,0px));justify-content:center}
+.wiz-bas .in{width:min(680px,100%);display:flex;align-items:center;gap:14px}
+.wiz-bas .grow{flex:1}
+.wiz-bas .btn.primary{font-size:16px;padding:11px 22px}
+.astuce{font-size:13px;color:var(--text-3)}
+.erreur{color:var(--red);font-size:14.5px;min-height:1.2em}
+
 /* ------------- petit écran : la liste, puis le détail (comme sur iPhone) */
 @media (max-width:760px){
   .app{grid-template-columns:1fr}
@@ -255,6 +324,8 @@ dialog[open] .sheet{animation:feuille .42s var(--ease)}
   .r-price{grid-row:1/3;grid-column:2}
   .sheet{width:100vw;max-height:calc(100vh - 20px);border-radius:16px 16px 0 0;align-self:end}
   dialog.bottom{margin:auto 0 0}
+  .wiz-body{padding:4vh 18px 24px}
+  .astuce{display:none}
 }
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 </style>
@@ -263,7 +334,7 @@ dialog[open] .sheet{animation:feuille .42s var(--ease)}
 <div class="app" id="app">
   <aside class="side" aria-label="Mes voyages">
     <div class="side-head">
-      <h1>Mes vols</h1>
+      <h1>Trackflight</h1>
       <div>
         <button class="icon-btn" id="b-reglages" title="Réglages" aria-label="Réglages"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
         <button class="icon-btn" id="b-nouveau" title="Nouveau voyage (Ctrl+N)" aria-label="Nouveau voyage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
@@ -279,6 +350,7 @@ dialog[open] .sheet{animation:feuille .42s var(--ease)}
 <dialog id="d-edit" class="bottom"><form class="sheet" id="f-edit" novalidate></form></dialog>
 <dialog id="d-reglages" class="bottom"><div class="sheet" id="s-reglages"></div></dialog>
 <dialog id="d-confirm"><div class="alert" id="s-confirm"></div></dialog>
+<div class="wiz" id="wiz" hidden></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
@@ -298,7 +370,7 @@ let D = null, sel = null, VOY = {}, FILTRE = {}, enCours = false, pollT = null;
 
 /* ------------------------------------------------------------ outils */
 async function api(chemin, corps){
-  const opt = corps === undefined ? {} : {method:"POST", headers:{"Content-Type":"application/json","X-Mes-Vols":"1"}, body:JSON.stringify(corps)};
+  const opt = corps === undefined ? {} : {method:"POST", headers:{"Content-Type":"application/json","X-Trackflight":"1"}, body:JSON.stringify(corps)};
   const r = await fetch(chemin, opt);
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw Object.assign(new Error(j.erreur || "L'application ne répond pas."), {details:j.details, status:r.status});
@@ -344,7 +416,9 @@ async function charger(){
   const ids = D.projets.map(p => p.id);
   const voulu = decodeURIComponent(location.hash.slice(1));
   if (!sel || !ids.includes(sel)) sel = ids.includes(voulu) ? voulu : (D.projets.find(p => p.actif) || D.projets[0] || {}).id || null;
-  dessinerListe(); dessinerPied(); await afficher(sel, false);
+  dessinerListe(); dessinerPied();
+  /* sur écran étroit, on commence par la liste (comme sur iPhone), sauf si un voyage est demandé dans l'adresse */
+  await afficher(sel, false, !matchMedia("(max-width: 760px)").matches || !!voulu);
   if (D.statut.en_cours) suivre();
 }
 async function voyage(id, frais=false){
@@ -387,7 +461,7 @@ function dessinerPied(prog){
 }
 
 /* ------------------------------------------------------------ partie droite */
-async function afficher(id, anime=true){
+async function afficher(id, anime=true, ouvrirDetail=true){
   sel = id;
   if (id) history.replaceState(null, "", "#" + encodeURIComponent(id));
   dessinerListe();
@@ -396,16 +470,16 @@ async function afficher(id, anime=true){
     $("#app").classList.remove("detail");
     main.innerHTML = `<div class="blank fade"><div>
       <h2>Suivez le prix de vos vols</h2>
-      <p>Indiquez votre trajet et vos dates. Mes vols compare les prix chaque jour et vous prévient quand ils baissent.</p>
+      <p>Indiquez votre trajet et vos dates. Trackflight compare les prix chaque jour et vous prévient quand ils baissent.</p>
       <button class="btn primary" id="b-premier">${ICONE_PLUS} Créer mon premier voyage</button>
       <div class="steps"><div><b>1. Votre trajet</b>Villes, dates, voyageurs.</div><div><b>2. Chaque jour</b>Kayak et Momondo sont comparés.</div><div><b>3. Une alerte</b>Quand le prix vous plaît.</div></div>
     </div></div>`;
-    $("#b-premier").onclick = () => editer(null);
+    $("#b-premier").onclick = () => assistant();
     return;
   }
   const p = D.projets.find(x => x.id === id);
   if (!p) return;
-  $("#app").classList.add("detail");
+  if (ouvrirDetail) $("#app").classList.add("detail");
   const v = await voyage(id);
   if (sel !== id) return;
   main.innerHTML = `<div class="content${anime ? " fade" : ""}">${entete(p)}${v ? corps(p, v) : attente(p)}</div>`;
@@ -499,7 +573,7 @@ function corps(p, V){
     ${H.length >= 2 ? `<section class="section"><h3>Évolution du prix</h3><div class="trend" id="trend"></div></section>` : ""}
     <section class="section">
       <h3>Vérifier sur les sites</h3>
-      <div class="pills">${V.liens.map(([n,u]) => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(n)} ↗</a>`).join("")}<a href="/excel/${encodeURIComponent(p.id)}">Exporter en Excel</a></div>
+      <div class="pills">${V.liens.map(([n,u]) => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(n)} ↗</a>`).join("")}<a href="#" data-excel="${esc(p.id)}">Exporter en Excel</a></div>
       <p class="muted" style="margin-top:14px">Relevé du ${esc(V.releve.replace(" ", " à "))} sur ${esc(V.sources)}. Prix par personne, taxes comprises, bagage en soute pas toujours inclus.</p>
     </section>`;
 }
@@ -569,13 +643,14 @@ function menu(ancre, p){
   const m = document.createElement("div"); m.className = "menu"; m.setAttribute("role", "menu");
   m.innerHTML = `<button role="menuitem" data-a="dup">Dupliquer</button>
     <button role="menuitem" data-a="arch">${p.actif ? "Archiver (ne plus suivre)" : "Reprendre le suivi"}</button>
-    <a role="menuitem" href="/excel/${encodeURIComponent(p.id)}">Exporter en Excel</a><hr>
+    <button role="menuitem" data-a="excel">Exporter en Excel</button><hr>
     <button role="menuitem" class="danger" data-a="suppr">Supprimer…</button>`;
   document.body.appendChild(m);
   const r = ancre.getBoundingClientRect();
   m.style.top = (r.bottom + 6 + scrollY) + "px"; m.style.left = Math.max(12, r.right - m.offsetWidth) + "px";
   m.querySelector("button,a").focus();
   m.onclick = async e => { const a = e.target.closest("[data-a]"); if (!a) return; fermerMenu();
+    if (a.dataset.a === "excel") exporter(p.id);
     if (a.dataset.a === "dup") editer({...structuredClone(p), id:"", nom:p.nom + " (copie)"}, true);
     if (a.dataset.a === "arch") { await sauver(D.projets.map(x => x.id === p.id ? {...x, actif: !x.actif} : x)); toast(p.actif ? "Voyage archivé" : "Suivi repris"); }
     if (a.dataset.a === "suppr") confirmer(`Supprimer « ${p.nom} » ?`, "L'historique des prix de ce voyage sera effacé.", "Supprimer", async () => {
@@ -714,27 +789,25 @@ function villeAuto(cote){
   const inp = $("#v-" + cote), box = $("#s-" + cote);
   let res = [], actif = 0;
   remplirVille(cote);
-  const montrer = () => {
-    const q = norm(inp.value.trim());
-    res = q ? VILLES().filter(v => v.k.includes(q)).sort((a,b) => (norm(a.nom).startsWith(q) ? 0 : 1) - (norm(b.nom).startsWith(q) ? 0 : 1)).slice(0, 7) : [];
-    if (/^[a-z]{3}$/.test(q) && !res.some(v => norm(v.code) === q)) res.push({nom: q.toUpperCase(), code: q.toUpperCase(), aeroports: q.toUpperCase(), pays: "Code d'aéroport"});
-    actif = 0;
-    box.innerHTML = res.map((v,i) => `<button type="button" role="option" data-i="${i}" aria-selected="${i === actif}">${esc(v.nom)} <small>${esc(v.pays)} · ${esc(v.code)}</small></button>`).join("");
+  const montrer = async () => {
+    await Lieux.charger();
+    res = Lieux.chercher(inp.value, 8); actif = 0;
+    box.innerHTML = res.map((x,i) => Lieux.ligne(x, i, i === actif)).join("");
     box.hidden = !res.length; inp.setAttribute("aria-expanded", !box.hidden);
   };
-  const choisir = i => { const v = res[i]; if (!v) return; BROUILLON[cote] = {code:v.code, nom: v.pays === "Code d'aéroport" ? v.code : v.nom, aeroports:v.aeroports}; remplirVille(cote); box.hidden = true; maj();
+  const choisir = i => { const x = res[i]; if (!x) return; BROUILLON[cote] = Lieux.choix(x); remplirVille(cote); box.hidden = true; maj();
     if (cote === "origine" && !BROUILLON.destination.code) $("#v-destination").focus(); };
   inp.addEventListener("input", () => { BROUILLON[cote] = {code:"", nom:"", aeroports:""}; $("#vs-" + cote).textContent = ""; montrer(); });
   inp.addEventListener("focus", () => inp.select());
   inp.addEventListener("keydown", e => {
     if (box.hidden) return;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); actif = (actif + (e.key === "ArrowDown" ? 1 : res.length - 1)) % res.length;
-      box.querySelectorAll("button").forEach((b,i) => b.setAttribute("aria-selected", i === actif)); }
+      box.querySelectorAll(".lieu").forEach((b,i) => b.setAttribute("aria-selected", i === actif)); }
     if (e.key === "Enter") { e.preventDefault(); choisir(actif); }
     if (e.key === "Escape") { e.stopPropagation(); e.preventDefault(); box.hidden = true; remplirVille(cote); }
   });
   inp.addEventListener("blur", () => setTimeout(() => { if (!box.hidden && res.length === 1) choisir(0); box.hidden = true; if (!BROUILLON[cote].code) inp.value = ""; }, 150));
-  box.addEventListener("mousedown", e => { const b = e.target.closest("button"); if (b) { e.preventDefault(); choisir(+b.dataset.i); } });
+  box.addEventListener("mousedown", e => { const b = e.target.closest(".lieu"); if (b) { e.preventDefault(); choisir(+b.dataset.i); } });
 }
 let essaye = false;
 function maj(valider=true){
@@ -806,17 +879,264 @@ function reglages(){
   if (!d.open) d.showModal();
 }
 
+/* ------------------------------------------------------------ lieux : recherche d'aéroports intelligente
+   Base OurAirports (domaine public) : aéroports à vols réguliers + regroupements par ville (TYO, PAR, LON…).
+   On cherche par ville (français ou anglais), pays, code ou nom d'aéroport. */
+const Lieux = (() => {
+  let index = null, charge = null;
+  const ICV = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V8l6-4v17M11 21V10l8 3v8M8 10v.01M8 13v.01M8 16v.01M15 15v.01M15 18v.01"/></svg>';
+  const ICA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></svg>';
+  const DN = {fr: new Intl.DisplayNames(["fr"], {type: "region"}), en: new Intl.DisplayNames(["en"], {type: "region"})};
+  const pays = (iso, l="fr") => { try { return DN[l].of(iso) || iso; } catch (e) { return iso; } };
+  function charger(){
+    if (charge) return charge;
+    charge = api("/api/aeroports").then(d => {
+      const metro = {};
+      for (const m of d.villes) for (const c of m.a) metro[c] = m.c;
+      const V = d.villes.map(m => ({type:"ville", code:m.c, ville:m.v, ve:"", nom:m.v, iso:m.p, poids:4, aeroports:m.a}));
+      const A = d.aeroports.map(a => ({type:"aeroport", code:a.c, ville:a.v || a.n, ve:a.ve, nom:a.n, iso:a.p, poids:a.t, metro:metro[a.c]}));
+      index = [...V, ...A].map((x, ordre) => ({...x, ordre, pays:pays(x.iso), kv:norm(x.ville), kve:norm(x.ve), kn:norm(x.nom), kp:norm(pays(x.iso)), kpe:norm(pays(x.iso, "en"))}));
+    });
+    return charge;
+  }
+  function chercher(q, n=8){
+    if (!index) return [];
+    q = norm(q.trim());
+    if (!q) return [];
+    const res = [];
+    for (const x of index) {
+      let s = 0;
+      if (x.code.toLowerCase() === q) s = 1000;
+      else if (x.kv === q || x.kve === q) s = 800 + x.poids * 20;
+      else if (x.kv.startsWith(q) || x.kve.startsWith(q)) s = 600 + x.poids * 20;
+      else if (q.length >= 3 && (x.kp.startsWith(q) || x.kpe.startsWith(q))) s = 300 + x.poids * 40;
+      else if (q.length >= 3 && x.kn.includes(q)) s = 200 + x.poids * 20;
+      else if (q.length >= 3 && (x.kv.includes(q) || x.kve.includes(q))) s = 150 + x.poids * 10;
+      if (s) res.push([s, x]);
+    }
+    /* à score égal : les villes dans l'ordre d'importance de la base (Tokyo avant Osaka), les aéroports par ordre alphabétique */
+    res.sort((a, b) => b[0] - a[0] || (a[1].type === "ville" && b[1].type === "ville" ? a[1].ordre - b[1].ordre : a[1].ville.localeCompare(b[1].ville, "fr")));
+    /* une ville déjà proposée « tous ses aéroports » : ses aéroports passent après les autres résultats */
+    const villes = new Set(res.filter(r => r[1].type === "ville").map(r => r[1].code));
+    const tete = [], queue = [];
+    for (const [, x] of res) (x.metro && villes.has(x.metro) ? queue : tete).push(x);
+    return [...tete, ...queue].slice(0, n);
+  }
+  function paysCherche(q){
+    q = norm(q.trim());
+    if (!index || q.length < 3) return null;
+    const x = index.find(x => x.kp === q || x.kpe === q || (x.kp.startsWith(q) && q.length >= 4));
+    return x ? x.pays : null;
+  }
+  function populaires(codes){ return index ? codes.map(c => index.find(x => x.code === c)).filter(Boolean) : []; }
+  function choix(x){
+    return x.type === "ville" ? {code:x.code, nom:x.ville, aeroports:x.aeroports.join(",")}
+                              : {code:x.code, nom:x.metro ? `${x.ville} (${x.code})` : x.ville, aeroports:x.code};
+  }
+  function ligne(x, i, sel){
+    const sous = x.type === "ville" ? `Tous les aéroports · ${x.aeroports.join(", ")} · ${x.pays}` : `${x.nom} · ${x.pays}`;
+    return `<button type="button" class="lieu" role="option" data-i="${i}" aria-selected="${!!sel}"><span class="ic">${x.type === "ville" ? ICV : ICA}</span><b>${esc(x.ville)}</b><small>${esc(sous)}</small><span class="cd">${esc(x.code)}</span></button>`;
+  }
+  return {charger, chercher, paysCherche, populaires, choix, ligne, pays};
+})();
+
+/* ------------------------------------------------------------ export Excel (dans Téléchargements) */
+async function exporter(id){
+  try { const r = await api("/api/excel", {id}); toast("Excel enregistré dans Téléchargements"); }
+  catch (e) { toast(e.message); }
+}
+document.addEventListener("click", e => {
+  const a = e.target.closest && e.target.closest("[data-excel]");
+  if (a) { e.preventDefault(); exporter(a.dataset.excel); }
+});
+
+/* ------------------------------------------------------------ questionnaire de création, une question par écran */
+const ICO = {
+  aller: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+  ar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h14M14 4l4 4-4 4M20 16H6M10 12l-4 4 4 4"/></svg>',
+  tous: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>',
+  un: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h18"/><circle cx="12" cy="12" r="2.5"/></svg>',
+  direct: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h18M15 6l6 6-6 6"/></svg>',
+  cloche: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>',
+};
+let W = null;
+function assistant(){
+  W = {p: nouveau(), i: 0, sens: 1, alerte: {baisse: true, seuil: false}};
+  W.p.nom = "";
+  W.p.duree_max_h = null;
+  Lieux.charger();
+  $("#wiz").hidden = false;
+  document.body.style.overflow = "hidden";
+  rendreEtape();
+}
+function fermerAssistant(){ $("#wiz").hidden = true; document.body.style.overflow = ""; W = null; }
+const ETAPES = [
+  {id:"depart", ok: p => !!p.origine.code},
+  {id:"arrivee", ok: p => !!p.destination.code && p.destination.code !== p.origine.code,
+    err: p => p.destination.code && p.destination.code === p.origine.code ? "L'arrivée est identique au départ." : ""},
+  {id:"type", ok: () => true},
+  {id:"aller", ok: p => !!p.date_aller && p.date_aller >= auj(), err: p => p.date_aller && p.date_aller < auj() ? "Cette date est passée." : ""},
+  {id:"retour", si: p => p.type === "ar", ok: p => !!p.date_retour && p.date_retour >= p.date_aller, err: p => p.date_retour && p.date_retour < p.date_aller ? "Le retour doit être après l'aller." : ""},
+  {id:"voyageurs", ok: () => true},
+  {id:"classe", ok: () => true},
+  {id:"preferences", ok: () => true},
+  {id:"alertes", ok: () => true},
+  {id:"recap", ok: () => true},
+];
+const etapesActives = () => ETAPES.filter(e => !e.si || e.si(W.p));
+function rendreEtape(){
+  const L = etapesActives(), e = L[W.i], p = W.p;
+  const titreHaut = `${W.i + 1} sur ${L.length}`;
+  $("#wiz").innerHTML = `<div class="wiz-top"><button class="btn link" id="w-fermer">Annuler</button><span class="n">${titreHaut}</span><span></span></div>
+    <div class="wiz-prog"><i style="width:${Math.round(100 * (W.i + 1) / L.length)}%"></i></div>
+    <div class="wiz-body"><div class="etape ${W.sens > 0 ? "entre" : "recule"}" id="w-etape">${contenu(e.id, p)}<p class="erreur" id="w-err" role="alert"></p></div></div>
+    <div class="wiz-bas"><div class="in">
+      ${W.i > 0 ? '<button class="btn" id="w-retour">Retour</button>' : ""}<span class="grow"></span>
+      <span class="astuce">${e.id === "recap" ? "" : "ou appuyez sur Entrée"}</span>
+      <button class="btn primary" id="w-suite">${e.id === "recap" ? "Lancer le suivi" : "Continuer"}</button>
+    </div></div>`;
+  $("#w-fermer").onclick = fermerAssistant;
+  const r = $("#w-retour"); if (r) r.onclick = () => aller(-1);
+  $("#w-suite").onclick = () => aller(1);
+  brancherEtape(e.id, p);
+}
+function aller(d){
+  const L = etapesActives(), e = L[W.i];
+  if (d > 0 && !e.ok(W.p)) { $("#w-err").textContent = (e.err && e.err(W.p)) || "Choisissez une réponse pour continuer."; return; }
+  if (d > 0 && e.id === "recap") return terminerAssistant();
+  W.sens = d; W.i = Math.max(0, Math.min(etapesActives().length - 1, W.i + d));
+  rendreEtape();
+}
+function carte(val, sel, titre, desc, ico, touche){
+  return `<button type="button" class="carte" data-v="${val}" aria-pressed="${sel}">${ico ? `<span class="ic">${ico}</span>` : ""}<b>${titre}</b>${desc ? `<span>${desc}</span>` : ""}${touche ? `<span class="touche">${touche}</span>` : ""}</button>`;
+}
+const IDEES = ["PAR", "TYO", "LON", "NYC", "LIS", "BCN", "ROM", "RAK", "YMQ", "DPS", "BKK", "ATH"];
+function contenu(id, p){
+  const lieu = cote => {
+    const v = p[cote];
+    return `${v.code ? `<div class="choisi"><span class="code">${esc(v.code)}</span><div><b>${esc(v.nom)}</b><small>${esc(v.aeroports.split(",").join(", "))}</small></div><button class="btn" id="w-changer">Changer</button></div>` : ""}
+      <input class="grand" id="w-lieu" placeholder="Ville, pays, aéroport ou code" autocomplete="off" spellcheck="false" ${v.code ? "hidden" : ""} aria-label="${cote === "origine" ? "Lieu de départ" : "Lieu d'arrivée"}">
+      <div id="w-pays" class="lieux-titre" hidden></div><div class="resultats" id="w-res" role="listbox"></div>
+      ${v.code ? "" : `<div class="idees" id="w-idees"></div>`}`;
+  };
+  switch (id) {
+    case "depart": return `<h2>D'où partez-vous ?</h2><p class="aide">Tapez une ville, un pays ou un aéroport : « Japon », « Lyon », « CDG »…</p>${lieu("origine")}`;
+    case "arrivee": return `<h2>Où allez-vous ?</h2><p class="aide">Une ville regroupe tous ses aéroports. Vous pouvez aussi choisir un aéroport précis.</p>${lieu("destination")}`;
+    case "type": return `<h2>Aller simple ou aller-retour ?</h2><div class="cartes">${carte("aller", p.type === "aller", "Aller simple", "Un seul trajet", ICO.aller, "1")}${carte("ar", p.type === "ar", "Aller-retour", "Avec une date de retour", ICO.ar, "2")}</div>`;
+    case "aller": return `<h2>Quand partez-vous ?</h2><input type="date" class="date-grande" id="w-date" min="${auj()}" value="${p.date_aller || ""}">
+      <p class="aide" style="margin-top:6px">Êtes-vous flexible ? Comparer les jours voisins trouve souvent moins cher.</p>
+      <div class="puces" id="w-flex">${[[0,"Date exacte"],[1,"± 1 jour"],[2,"± 2 jours"],[3,"± 3 jours"]].map(([v,t]) => `<button type="button" class="puce" data-v="${v}" aria-pressed="${+p.flex === v}">${t}</button>`).join("")}</div>`;
+    case "retour": return `<h2>Quand rentrez-vous ?</h2><input type="date" class="date-grande" id="w-date" min="${p.date_aller || auj()}" value="${p.date_retour || ""}">
+      <div class="puces" id="w-duree">${[[3,"3 jours"],[7,"1 semaine"],[14,"2 semaines"],[21,"3 semaines"]].map(([v,t]) => `<button type="button" class="puce" data-v="${v}">${t}</button>`).join("")}</div>`;
+    case "voyageurs": return `<h2>Qui voyage ?</h2>${[["adultes","Adultes","12 ans et plus"],["enfants","Enfants","de 2 à 11 ans"],["bebes","Bébés","moins de 2 ans, sur les genoux"]].map(([k,t,d]) =>
+      `<div class="rangee"><div><b>${t}</b><small>${d}</small></div><div class="compteur" data-k="${k}"><button type="button" data-d="-1" aria-label="${t} : un de moins">−</button><output>${p[k]}</output><button type="button" data-d="1" aria-label="${t} : un de plus">+</button></div></div>`).join("")}`;
+    case "classe": return `<h2>Dans quelle classe ?</h2><div class="cartes">${[["eco","Économique","Le plus abordable"],["premium","Premium","Plus d'espace"],["affaires","Affaires","Siège-lit sur long-courrier"],["premiere","Première","Le haut de gamme"]].map(([v,t,d],i) => carte(v, p.classe === v, t, d, "", String(i+1))).join("")}</div>`;
+    case "preferences": return `<h2>Vos préférences de vol</h2>
+      <div class="cartes">${carte("tous", p.escales === "tous", "Peu importe", "Le moins cher, avec ou sans escale", ICO.tous)}${carte("1", p.escales === "1", "1 escale au plus", "Un bon compromis", ICO.un)}${carte("direct", p.escales === "direct", "Direct", "Sans escale, souvent plus cher", ICO.direct)}</div>
+      <p class="aide" style="margin-top:8px">Durée maximale d'un trajet</p>
+      <div class="puces" id="w-dmax">${[[null,"Peu importe"],[12,"12 h"],[16,"16 h"],[21,"21 h"],[24,"24 h"]].map(([v,t]) => `<button type="button" class="puce" data-v="${v ?? ""}" aria-pressed="${(p.duree_max_h ?? null) === v}">${t}</button>`).join("")}</div>
+      <label class="rangee" style="cursor:pointer"><div><b>Accepter les billets séparés</b><small>Moins chers, mais sans garantie si un vol a du retard</small></div><span class="toggle"><input type="checkbox" id="w-sep" ${p.billets_separes ? "checked" : ""}><span class="switch"></span></span></label>`;
+    case "alertes": return `<h2>Quand voulez-vous être prévenu ?</h2><p class="aide">Une notification apparaît sur cet ordinateur. Les montants sont par personne.</p>
+      <label class="rangee" style="cursor:pointer"><div><b>Quand un prix baisse</b><small>D'au moins <input type="number" id="w-baisse" value="${p.alertes.baisse_min ?? 30}" min="5" step="5" style="width:64px;border:0;background:var(--fill);border-radius:6px;padding:2px 6px;text-align:right"> €</small></div><span class="toggle"><input type="checkbox" id="w-a-baisse" ${W.alerte.baisse ? "checked" : ""}><span class="switch"></span></span></label>
+      <label class="rangee" style="cursor:pointer"><div><b>Quand un vol passe sous un prix</b><small>Sous <input type="number" id="w-seuil" value="${p.alertes.seuil_escale ?? ""}" min="0" step="10" placeholder="500" style="width:72px;border:0;background:var(--fill);border-radius:6px;padding:2px 6px;text-align:right"> €</small></div><span class="toggle"><input type="checkbox" id="w-a-seuil" ${W.alerte.seuil ? "checked" : ""}><span class="switch"></span></span></label>`;
+    case "recap": {
+      const auto = `${p.destination.nom.replace(/ \(.*\)$/, "")} ${new Date(p.date_aller + "T12:00:00").toLocaleDateString("fr-FR", {month:"long", year:"numeric"})}`;
+      return `<h2>Tout est prêt</h2><p class="recap">${phrase(p)}</p>
+        <div class="rangee"><div style="flex:1"><b>Nom du voyage</b><input class="grand" id="w-nom" style="font-size:22px;margin-top:4px" maxlength="60" placeholder="${esc(auto)}" value="${esc(p.nom)}"></div></div>
+        <p class="aide">Les prix seront comparés sur Kayak et Momondo maintenant, puis chaque jour à 9 h.</p>`;
+    }
+  }
+}
+function brancherEtape(id, p){
+  const presse = (sel, fn, auto) => document.querySelectorAll(sel).forEach(b => b.addEventListener("click", () => {
+    b.parentElement.querySelectorAll("[aria-pressed]").forEach(x => x.setAttribute("aria-pressed", x === b)); fn(b.dataset.v);
+    $("#w-err").textContent = ""; if (auto) setTimeout(() => aller(1), 260); }));
+  if (id === "depart" || id === "arrivee") brancherLieu(id === "depart" ? "origine" : "destination");
+  if (id === "type") presse(".carte", v => p.type = v, true);
+  if (id === "classe") presse(".carte", v => p.classe = v, true);
+  if (id === "aller") { const d = $("#w-date"); d.oninput = () => { p.date_aller = d.value; if (p.date_retour && p.date_retour < p.date_aller) p.date_retour = ""; }; presse("#w-flex .puce", v => p.flex = +v); setTimeout(() => d.focus(), 80); }
+  if (id === "retour") { const d = $("#w-date"); d.oninput = () => p.date_retour = d.value;
+    document.querySelectorAll("#w-duree .puce").forEach(b => b.onclick = () => { const x = new Date(p.date_aller + "T12:00:00"); x.setDate(x.getDate() + +b.dataset.v); p.date_retour = x.toISOString().slice(0,10); d.value = p.date_retour;
+      document.querySelectorAll("#w-duree .puce").forEach(y => y.setAttribute("aria-pressed", y === b)); });
+    if (!p.date_retour) { document.querySelector('#w-duree .puce[data-v="7"]').click(); } setTimeout(() => d.focus(), 80); }
+  if (id === "voyageurs") document.querySelectorAll(".compteur").forEach(c => { const maj2 = () => { c.querySelector("output").textContent = p[c.dataset.k];
+      document.querySelectorAll(".compteur").forEach(cc => { const k = cc.dataset.k; cc.querySelector('[data-d="-1"]').disabled = p[k] <= (k === "adultes" ? Math.max(1, p.bebes) : 0); cc.querySelector('[data-d="1"]').disabled = nPass(p) >= 9 || (k === "bebes" && p.bebes >= p.adultes); cc.querySelector("output").textContent = p[k]; }); };
+    c.addEventListener("click", e => { const b = e.target.closest("button"); if (!b || b.disabled) return; p[c.dataset.k] += +b.dataset.d; maj2(); }); maj2(); });
+  if (id === "preferences") { presse(".carte", v => p.escales = v); presse("#w-dmax .puce", v => p.duree_max_h = v === "" ? null : +v); $("#w-sep").onchange = e => p.billets_separes = e.target.checked; }
+  if (id === "alertes") {
+    const sync = () => { W.alerte.baisse = $("#w-a-baisse").checked; W.alerte.seuil = $("#w-a-seuil").checked;
+      p.alertes.baisse_min = W.alerte.baisse ? (+$("#w-baisse").value || 30) : null;
+      const s = +$("#w-seuil").value || null; p.alertes.seuil_escale = W.alerte.seuil ? s : null; p.alertes.seuil_direct = W.alerte.seuil ? s : null; };
+    ["#w-a-baisse", "#w-a-seuil"].forEach(x => $(x).onchange = sync);
+    $("#w-baisse").oninput = sync; $("#w-seuil").oninput = () => { $("#w-a-seuil").checked = !!$("#w-seuil").value; sync(); }; sync(); }
+  if (id === "recap") { const n = $("#w-nom"); n.oninput = () => p.nom = n.value; setTimeout(() => n.focus(), 80); }
+}
+async function brancherLieu(cote){
+  const inp = $("#w-lieu"), box = $("#w-res"), titre = $("#w-pays");
+  let res = [], actif = 0;
+  const ch = $("#w-changer");
+  if (ch) ch.onclick = () => { W.p[cote] = {code:"", nom:"", aeroports:""}; W.sens = 0; rendreEtape(); };
+  await Lieux.charger();
+  const idees = $("#w-idees");
+  if (idees) idees.innerHTML = Lieux.populaires(IDEES.filter(c => c !== W.p.origine.code)).slice(0, 10).map(x => `<button type="button" data-c="${x.code}">${esc(x.ville)}</button>`).join("");
+  if (idees) idees.onclick = e => { const b = e.target.closest("button"); if (!b) return; const x = Lieux.populaires([b.dataset.c])[0]; if (x) prendre(x); };
+  const prendre = x => { W.p[cote] = Lieux.choix(x); $("#w-err").textContent = ""; W.sens = 1; aller(1); };
+  if (inp.hidden) return;
+  inp.focus();
+  const montrer = () => {
+    res = Lieux.chercher(inp.value, 9); actif = 0;
+    const pays = Lieux.paysCherche(inp.value);
+    titre.hidden = !pays; titre.textContent = pays ? `Aéroports ${/^[aeiouyéèh]/i.test(pays) ? "en" : "au"} ${pays}` : "";
+    box.innerHTML = res.map((x, i) => Lieux.ligne(x, i, i === actif)).join("");
+    if (idees) idees.hidden = !!inp.value.trim();
+  };
+  inp.oninput = montrer;
+  inp.onkeydown = e => {
+    if ((e.key === "ArrowDown" || e.key === "ArrowUp") && res.length) { e.preventDefault(); actif = (actif + (e.key === "ArrowDown" ? 1 : res.length - 1)) % res.length;
+      box.querySelectorAll(".lieu").forEach((b, i) => b.setAttribute("aria-selected", i === actif)); box.children[actif].scrollIntoView({block:"nearest"}); }
+    if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); if (res[actif]) prendre(res[actif]); }
+  };
+  box.onclick = e => { const b = e.target.closest(".lieu"); if (b) prendre(res[+b.dataset.i]); };
+}
+async function terminerAssistant(){
+  const p = W.p;
+  if (!p.nom.trim()) p.nom = $("#w-nom").placeholder;
+  const avant = new Set(D.projets.map(x => x.id));
+  $("#w-suite").disabled = true;
+  try {
+    await sauver([...D.projets, p]);
+    const id = (D.projets.find(x => !avant.has(x.id)) || {}).id;
+    fermerAssistant();
+    await afficher(id);
+    toast("Voyage créé, recherche des prix lancée");
+    chercher(id);
+  } catch (e) {
+    $("#w-err").textContent = e.details ? Object.values(e.details).flat().join(" ") : e.message;
+    $("#w-suite").disabled = false;
+  }
+}
+document.addEventListener("keydown", e => {
+  if ($("#wiz").hidden || !W) return;
+  if (e.key === "Escape") { fermerAssistant(); return; }
+  const id = etapesActives()[W.i].id;
+  if (e.key === "Enter" && !e.shiftKey && e.target.id !== "w-lieu") { e.preventDefault(); aller(1); }
+  if (e.key === "Enter" && e.shiftKey) { e.preventDefault(); aller(-1); }
+  if ((id === "type" || id === "classe") && /^[1-4]$/.test(e.key) && e.target.tagName !== "INPUT") {
+    const c = document.querySelectorAll(".carte")[+e.key - 1]; if (c) c.click();
+  }
+});
+
 /* ------------------------------------------------------------ démarrage */
-$("#b-nouveau").onclick = () => editer(null);
+$("#b-nouveau").onclick = () => assistant();
 $("#b-reglages").onclick = () => reglages();
 $("#q").addEventListener("input", dessinerListe);
 document.addEventListener("keydown", e => {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "n") { e.preventDefault(); editer(null); }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "n") { e.preventDefault(); if ($("#wiz").hidden) assistant(); }
   if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && $("#d-edit").open) { e.preventDefault(); $("#f-edit").requestSubmit(); }
   if (e.key === "Escape") fermerMenu();
 });
 window.addEventListener("hashchange", () => { const id = decodeURIComponent(location.hash.slice(1)); if (id && id !== sel && D.projets.some(p => p.id === id)) afficher(id); });
-charger().catch(() => { $("#main").innerHTML = '<div class="blank"><div><h2>L’application ne répond pas</h2><p>Fermez cette page et relancez Mes vols.</p></div></div>'; });
+charger().catch(() => { $("#main").innerHTML = '<div class="blank"><div><h2>L’application ne répond pas</h2><p>Fermez cette page et relancez Trackflight.</p></div></div>'; });
 </script>
 </body>
 </html>

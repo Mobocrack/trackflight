@@ -1,4 +1,4 @@
-# Mes vols
+# Trackflight
 
 Application pour Windows et Mac qui suit le prix de vos voyages en avion et vous prévient quand il baisse.
 
@@ -15,23 +15,23 @@ Rendez-vous dans les **[versions publiées](../../releases/latest)** : le mode d
 
 | Fichier | Rôle |
 |---|---|
-| `mesvols.py` | Point d'entrée (ouvrir l'app, relevé, désinstallation) |
+| `trackflight.py` | Point d'entrée (ouvrir l'app, relevé, désinstallation) |
 | `serveur.py`, `ressources/app.html` | Interface locale (127.0.0.1 uniquement) |
 | `releve.py`, `lecteur.py` | Relevé des prix et lecture des pages de résultats |
 | `projets.py`, `villes.py` | Critères des voyages et liens de recherche |
 | `installation.py` | Programmation de la recherche quotidienne (tâche Windows, agent macOS) |
 | `navigateur.py`, `notif.py` | Navigateur de recherche et notifications |
 
-Les données de l'utilisateur sont dans `%LOCALAPPDATA%\MesVols` (Windows) ou `~/Library/Application Support/MesVols` (Mac).
+Les données de l'utilisateur sont dans `%LOCALAPPDATA%\Trackflight` (Windows) ou `~/Library/Application Support/Trackflight` (Mac).
 
 Les comparateurs sont consultés comme le ferait une personne, à un rythme modéré, sans contournement de leurs protections. Les sites qui refusent les navigateurs automatisés (Skyscanner, Expedia, Google Flights en direct) ne sont pas interrogés.
 
 ## Fabriquer
 
 ```
-pip install pyinstaller playwright openpyxl certifi pillow
+pip install pyinstaller playwright openpyxl certifi pillow pywebview
 python outils/icone.py
-pyinstaller MesVols.spec --noconfirm
+pyinstaller Trackflight.spec --noconfirm
 ```
 
 Les versions Windows et Mac sont fabriquées par GitHub Actions (`.github/workflows/fabrication.yml`) à chaque étiquette `vX.Y.Z`.

@@ -11,8 +11,11 @@ import subprocess
 
 import chemins
 
-TACHE = "Mes vols - recherche quotidienne"
-AGENT = "fr.mesvols.releve"
+TACHE = "Trackflight - recherche quotidienne"
+AGENT = "fr.trackflight.releve"
+# Ancien nom de l'application (« Mes vols », version 1.0) : retiré à l'installation de Trackflight.
+TACHE_ANCIENNE = "Mes vols - recherche quotidienne"
+AGENT_ANCIEN = "fr.mesvols.releve"
 FICHIER = os.path.join(chemins.donnees(), "installation.json")
 SANS_FENETRE = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
@@ -22,7 +25,7 @@ $t1 = New-ScheduledTaskTrigger -Daily -At 09:00
 $t2 = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 $t2.Delay = 'PT5M'
 $s = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 2) -MultipleInstances IgnoreNew
-Register-ScheduledTask -TaskName $env:MV_TACHE -Action $a -Trigger @($t1, $t2) -Settings $s -Description 'Relève les prix de vos voyages (application Mes vols).' -Force | Out-Null
+Register-ScheduledTask -TaskName $env:MV_TACHE -Action $a -Trigger @($t1, $t2) -Settings $s -Description 'Relève les prix de vos voyages (application Trackflight).' -Force | Out-Null
 """
 
 
@@ -35,12 +38,27 @@ def _plist():
     return os.path.expanduser(f"~/Library/LaunchAgents/{AGENT}.plist")
 
 
+def retirer_ancien():
+    """Retire la recherche programmée par l'ancienne version « Mes vols »."""
+    try:
+        if chemins.SYSTEME == "Windows":
+            subprocess.run(["schtasks", "/Delete", "/TN", TACHE_ANCIENNE, "/F"], capture_output=True, creationflags=SANS_FENETRE)
+        elif chemins.SYSTEME == "Darwin":
+            ancien = os.path.expanduser(f"~/Library/LaunchAgents/{AGENT_ANCIEN}.plist")
+            if os.path.exists(ancien):
+                subprocess.run(["launchctl", "unload", ancien], capture_output=True)
+                os.remove(ancien)
+    except OSError:
+        pass
+
+
 def installer(force=False):
     """Inscrit la recherche quotidienne. Renvoie (ok, message)."""
+    retirer_ancien()
     exe, args = _commande()
     if "/AppTranslocation/" in exe:
         # macOS lance les apps téléchargées depuis un emplacement temporaire : la programmation y serait perdue.
-        return False, "Glissez « Mes vols » dans le dossier Applications, puis rouvrez-la depuis là."
+        return False, "Glissez « Trackflight » dans le dossier Applications, puis rouvrez-la depuis là."
     signature = {"exe": exe, "args": args}
     try:
         with open(FICHIER, encoding="utf-8") as f:
