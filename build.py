@@ -43,6 +43,38 @@ def derniers(p):
     return lire_json(os.path.join(P.dossier(p), "derniers.json"), None)
 
 
+# Escales qui demandent une autorisation de voyage, même en simple correspondance (pour un passeport français).
+# Montants vérifiés en novembre 2026 ; ils changent : l'app renvoie toujours au site officiel.
+FORMALITES = {
+    "US": {"court": "ESTA requis", "long": "Escale aux États-Unis : ESTA obligatoire, même en correspondance (environ 40 $ par personne)"},
+    "CA": {"court": "AVE Canada requise", "long": "Escale au Canada : AVE (eTA) obligatoire (7 $ CA par personne)"},
+    "GB": {"court": "ETA Royaume-Uni", "long": "Escale au Royaume-Uni : ETA souvent exigée, même en correspondance (20 £ par personne)"},
+}
+_PAYS = None
+
+
+def pays_aeroport(code):
+    global _PAYS
+    if _PAYS is None:
+        try:
+            with open(chemins.ressources("aeroports.json"), encoding="utf-8") as f:
+                _PAYS = {a["c"]: a["p"] for a in json.load(f)["aeroports"]}
+        except (OSError, ValueError, KeyError):
+            _PAYS = {}
+    return _PAYS.get(code.strip().upper())
+
+
+def formalites(v):
+    """Autorisations nécessaires pour les escales du vol (aller et retour)."""
+    codes = [c for t in (v, v.get("retour") or {}) for c in str(t.get("via") or "").split(",") if c.strip()]
+    pays = []
+    for c in codes:
+        p = pays_aeroport(c)
+        if p in FORMALITES and p not in pays:
+            pays.append(p)
+    return [FORMALITES[p] for p in pays]
+
+
 def consolider(p, vols):
     """Un vol = même date, mêmes horaires, mêmes escales (et même retour). On garde le meilleur prix."""
     out = {}
@@ -58,6 +90,7 @@ def consolider(p, vols):
         cur["obs"].append(obs)
     res = []
     for v in out.values():
+        v["formalites"] = formalites(v)
         best = min(v["obs"], key=lambda o: o["prix"])
         v.update(prix=best["prix"], source=best["source"], lien=best["lien"],
                  prix_max=max(o["prix"] for o in v["obs"]), site=lien_compagnie(v["compagnie"]),
@@ -110,7 +143,8 @@ def donnees_voyage(p):
     if not d:
         return None
     champs = ("date", "compagnie", "depart", "arrivee", "aeroports", "duree", "escales", "via", "escale_detail",
-              "prix", "prix_total", "prix_max", "source", "lien", "site", "autonome", "ok", "retour", "obs")
+              "prix", "prix_total", "prix_max", "source", "lien", "site", "autonome", "ok", "retour", "obs",
+              "formalites", "logo")
     vols = consolider(p, d["vols"])
     return {"projet": _projet_public(p), "releve": d["releve"], "sources": d.get("sources", "Kayak"),
             "histo": historique(p), "vols": [{k: v.get(k) for k in champs} for v in vols], "liens": P.liens(p),

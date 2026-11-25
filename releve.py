@@ -5,6 +5,7 @@ avec une clé SerpApi personnelle (offre gratuite) saisie dans les réglages.
 """
 import csv
 import datetime as dt
+import hashlib
 import json
 import logging
 import os
@@ -36,6 +37,8 @@ DEFAUT = {
     "serpapi_cle": "",          # clé gratuite sur serpapi.com (Google Flights), vide = Google ignoré
     "serpapi_max_mois": 120,
     "google_seul": False,
+    "serpapi_nom": "",          # nom de la clé active (« Ma clé », « Axel »…), pour le coffre
+    "heure": 9,                 # heure de la recherche quotidienne (0 à 23)
 }
 COLONNES = ["releve", "source", "date", "compagnie", "depart", "arrivee", "aeroports", "duree_min", "escales", "via",
             "autonome", "prix", "date_retour", "retour_depart", "retour_arrivee", "retour_duree_min", "retour_escales",
@@ -172,17 +175,42 @@ def _raison_serpapi(e):
     return str(e)
 
 
+CLE_EPUISEE = os.path.join(DONNEES, "cle_epuisee.json")
+
+
+def epuisee(e, raison):
+    """La clé n'a plus de crédit (message de SerpApi, ou code HTTP 429)."""
+    code = getattr(e, "code", None)
+    texte = (raison or "").lower()
+    return code == 429 or "run out of searches" in texte or "out of searches" in texte or "plan limit" in texte
+
+
+def signaler_cle_epuisee(cfg, raison):
+    """Note l'épuisement (l'app proposera une autre clé du coffre à la prochaine ouverture) et prévient une seule fois."""
+    if os.path.exists(CLE_EPUISEE):
+        return
+    ecrire_json(CLE_EPUISEE, {"quand": dt.datetime.now().strftime("%d/%m/%Y %H:%M"), "raison": str(raison)[:200]})
+    log.warning("clé Google Flights épuisée : %s", raison)
+    if cfg["notifications"]:
+        notif.envoyer("Trackflight : clé Google Flights épuisée",
+                      "Ouvrez Trackflight pour choisir une autre clé (coffre) ou attendre le mois prochain.")
+
+
 def relever_google(cfg, etat, p):
     if not (cfg["google_seul"] or "google" in cfg["sources"]) or not cfg["serpapi_cle"]:
         return []
     mois = dt.date.today().strftime("%Y-%m")
-    quota = etat.setdefault("serpapi", {})
+    # Compteur mensuel propre à chaque clé (repérée par une empreinte, jamais la clé elle-même) :
+    # changer de clé grâce au coffre repart de zéro.
+    empreinte = hashlib.sha256(cfg["serpapi_cle"].encode()).hexdigest()[:12]
+    quota = etat.setdefault("serpapi_cles", {}).setdefault(empreinte, {})
     if quota.get("mois") != mois:
         quota.update(mois=mois, n=0)
     tous, n_pass, reperes = [], P.nb_passagers(p), {}
     for date in P.dates_aller(p):
         if quota["n"] >= cfg["serpapi_max_mois"]:
-            log.warning("SerpApi : quota mensuel atteint (%s)", quota["n"])
+            log.warning("Google Flights : limite mensuelle de l'app atteinte pour cette clé (%s recherches)", quota["n"])
+            signaler_cle_epuisee(cfg, f"limite de {cfg['serpapi_max_mois']} recherches par mois atteinte")
             break
         try:
             d = https_json("https://serpapi.com/search.json?" + urllib.parse.urlencode(P.params_serpapi(p, date, cfg["serpapi_cle"])))
@@ -191,13 +219,24 @@ def relever_google(cfg, etat, p):
             raison = _raison_serpapi(e)
             log.error("[%s] Google Flights %s : %s", p["id"], date, raison)
             ERREURS_GOOGLE.append(raison)
+            if epuisee(e, raison):
+                signaler_cle_epuisee(cfg, raison)
+                break
             continue
         if d.get("error"):
             log.error("[%s] Google Flights %s : %s", p["id"], date, d["error"])
             ERREURS_GOOGLE.append(d["error"])
+            if epuisee(None, d["error"]):
+                signaler_cle_epuisee(cfg, d["error"])
+                break
             continue
         log.info("[%s] Google Flights %s : %d vols lus", p["id"], date,
                  len(d.get("best_flights", [])) + len(d.get("other_flights", [])))
+        if os.path.exists(CLE_EPUISEE):  # la clé répond de nouveau (nouveau mois, ou clé changée)
+            try:
+                os.remove(CLE_EPUISEE)
+            except OSError:
+                pass
         if isinstance(d.get("price_insights"), dict):  # repère de Google : niveau du prix, fourchette habituelle, historique récent
             pi = d["price_insights"]
             reperes[date] = {k: pi.get(k) for k in ("lowest_price", "price_level", "typical_price_range", "price_history")}
@@ -211,11 +250,13 @@ def relever_google(cfg, etat, p):
                 if sg.get("airline") and sg["airline"] not in cies:
                     cies.append(sg["airline"])
             brut = json.dumps(f).lower()
+            logo = f.get("airline_logo") or next((sg.get("airline_logo") for sg in segs if sg.get("airline_logo")), "")
             total = int(f["price"])
             tous.append(dict(date=date, compagnie=", ".join(cies), **_trajet_serpapi(segs, esc),
                              duree=int(f.get("total_duration", 0)), prix=round(total / n_pass), prix_total=total,
                              autonome="self_transfer" in brut or "self-transfer" in brut, retour=None,
-                             source="Google Flights", lien=lien))
+                             source="Google Flights", lien=lien,
+                             logo=logo if str(logo).startswith("https://www.gstatic.com/") else ""))
     if reperes:
         ecrire_json(os.path.join(P.dossier(p), "google_repere.json"),
                     {"maj": dt.datetime.now().strftime("%d/%m/%Y %H:%M"), "passagers": n_pass, "dates": reperes})
@@ -252,6 +293,15 @@ def alertes(cfg, p, tous, etat):
         if raison:
             deja[k] = v["prix"]
             lignes.append(f"{v['prix']} € {v['compagnie']}, {P.date_txt(v['date'], False)} à {v['depart']} ({raison})")
+    # « Nouveau meilleur prix » : le meilleur prix du voyage passe sous le plus bas jamais vu
+    # (nouveau vol ou baisse lente). Le premier relevé fixe la référence, sans notification.
+    if meilleurs:
+        top = min(meilleurs.values(), key=lambda v: v["prix"])
+        record = etat.get("record")
+        if a.get("record", True) and record and top["prix"] < record and not any(l.startswith(f"{top['prix']} € {top['compagnie']}") for l in lignes):
+            lignes.insert(0, f"{top['prix']} € {top['compagnie']}, {P.date_txt(top['date'], False)} à {top['depart']} "
+                             f"(nouveau meilleur prix, avant {record} €)")
+        etat["record"] = min(record or top["prix"], top["prix"])
     etat["alertes"] = deja
     etat["prix"] = {k: v["prix"] for k, v in meilleurs.items()}
     if lignes and cfg["notifications"]:

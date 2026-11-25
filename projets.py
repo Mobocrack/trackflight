@@ -23,7 +23,8 @@ MODELE = {
     "adultes": 1, "enfants": 0, "bebes": 0,
     "classe": "eco", "escales": "tous", "duree_max_h": None, "billets_separes": False,
     "alertes": {"seuil_escale": None, "seuil_direct": None, "baisse_min": 30,
-                "plafond_baisse_escale": None, "plafond_baisse_direct": None},
+                "plafond_baisse_escale": None, "plafond_baisse_direct": None,
+                "record": True},  # « nouveau meilleur prix » : sous le plus bas jamais vu
 }
 
 

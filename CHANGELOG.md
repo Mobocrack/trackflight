@@ -1,5 +1,15 @@
 # Journal des versions
 
+## 1.3.0 (25/11/2026)
+
+- Nouveau : coffre à clés (Réglages > Google Flights > Coffre à clés). Livré vide, il range les clés prêtées par d'autres personnes, avec leur accord. Chiffré (AES-256-GCM) par un mot de passe choisi par la personne, avec un code de secours affiché une seule fois en cas d'oubli. La clé active reste dans l'app : le coffre ne s'ouvre que pour échanger de clé.
+- Clé épuisée : l'app le repère (message de SerpApi ou limite mensuelle), prévient par une notification, puis propose à l'ouverture d'utiliser une autre clé du coffre. L'échange se fait seulement sur décision de l'utilisateur, jamais tout seul.
+- Le compteur de recherches mensuelles est propre à chaque clé.
+- Nouveau : alerte « Nouveau meilleur prix », active par défaut : notification dès que le meilleur prix d'un voyage passe sous le plus bas déjà vu (nouveau vol ou baisse lente).
+- Nouveau : heure de la recherche quotidienne réglable (Réglages > Recherche automatique), 9 h par défaut.
+- Nouveau : badge sur les vols dont une escale demande une autorisation de voyage (ESTA États-Unis, AVE Canada, ETA Royaume-Uni), avec le coût indicatif au survol. Information seulement : ces vols restent proposés.
+- Nouveau : logo de la compagnie à côté de son nom (fourni par Google Flights).
+
 ## 1.2.5 (25/11/2026)
 
 - Nouveau : « Repère Google Flights » sur la page d'un voyage : prix bas, habituel ou élevé pour ce trajet, fourchette de prix habituelle par personne, et courbe des prix des dernières semaines vue par Google. Ces informations arrivent avec chaque recherche Google Flights, sans en consommer davantage.

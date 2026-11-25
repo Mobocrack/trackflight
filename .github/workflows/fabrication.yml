@@ -33,7 +33,7 @@ jobs:
       - name: Dépendances
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pyinstaller playwright openpyxl certifi pillow pywebview
+          python -m pip install pyinstaller playwright openpyxl certifi pillow pywebview cryptography
 
       - name: Icônes
         run: python outils/icone.py --icns

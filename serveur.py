@@ -14,6 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import build
 import chemins
+import coffre
 import installation
 import maj
 import navigateur
@@ -38,13 +39,58 @@ def releve_actif():
     return (proc is not None and proc.poll() is None) or releve.en_cours()
 
 
+class CleRefusee(Exception):
+    def __init__(self, message, code=400):
+        super().__init__(message)
+        self.code = code
+
+
+def compte_serpapi(cle):
+    """Interroge la page « compte » de SerpApi (ne consomme aucune recherche). Renvoie ses informations."""
+    import urllib.error
+    import urllib.parse
+    if not cle:
+        raise CleRefusee("Collez d'abord la clé dans le champ.")
+    if len(cle) > 200 or not cle.isalnum():
+        raise CleRefusee("Ce texte ne ressemble pas à une clé : elle ne contient que des lettres et des chiffres.")
+    try:
+        compte = releve.https_json("https://serpapi.com/account.json?" + urllib.parse.urlencode({"api_key": cle}))
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            raise CleRefusee("SerpApi refuse cette clé. Vérifiez qu'elle est copiée en entier.")
+        raise CleRefusee(f"SerpApi ne répond pas correctement (code {e.code}). Réessayez plus tard.", 502)
+    except (OSError, ValueError):
+        raise CleRefusee("Impossible de joindre SerpApi. Vérifiez la connexion internet.", 502)
+    if compte.get("error"):
+        raise CleRefusee("SerpApi refuse cette clé. Vérifiez qu'elle est copiée en entier.")
+    return compte
+
+
+def restant(compte):
+    n = compte.get("total_searches_left", compte.get("plan_searches_left"))
+    return n if isinstance(n, int) else None
+
+
+def activer_cle(cfg, cle, nom):
+    """Fait d'une clé la clé active (sur Mac : Google Flights seul) et efface l'alerte « clé épuisée »."""
+    cfg["serpapi_cle"], cfg["serpapi_nom"] = cle, (nom or "Ma clé")[:40]
+    if chemins.SYSTEME == "Darwin":  # sur Mac, Kayak et Momondo refusent la recherche automatique
+        cfg["google_seul"] = True
+    releve.sauver_config(cfg)
+    try:
+        os.remove(releve.CLE_EPUISEE)
+    except OSError:
+        pass
+
+
 def etat_app():
     requis = bool(releve.sources_navigateur(releve.config()))
     return {"navigateur_requis": requis, "navigateur_pret": requis and navigateur.pret(),
             "navigateur_prepa": requis and navigateur.ETAT["en_cours"],
             "navigateur_erreur": navigateur.ETAT["erreur"], "releve_en_cours": releve_actif(),
             "releve_erreur": None if releve_actif() else releve.lire_json(os.path.join(releve.DONNEES, "derniere_erreur.json"), None),
-            "installation": ETAT["installation"]}
+            "installation": ETAT["installation"], "coffre": coffre.existe(),
+            "cle_epuisee": releve.lire_json(releve.CLE_EPUISEE, None)}
 
 
 def journal_lisible(n=300):
@@ -73,6 +119,7 @@ def nettoyer(p):
     for k in ("seuil_escale", "seuil_direct", "baisse_min", "plafond_baisse_escale", "plafond_baisse_direct"):
         v = p["alertes"].get(k)
         p["alertes"][k] = int(v) if v not in (None, "") else None
+    p["alertes"]["record"] = bool(p["alertes"].get("record", True))
     for cote in ("origine", "destination"):
         p[cote]["code"] = (p[cote]["code"] or "").strip().upper()
     if p["type"] != "ar":
@@ -86,6 +133,68 @@ def page_html(texte):
 
 
 class Gestionnaire(BaseHTTPRequestHandler):
+    def _coffre(self, action, corps):
+        """Coffre à clés : le mot de passe (ou le code de secours) est demandé à chaque opération.
+        Les clés ne quittent jamais le serveur local : l'interface ne reçoit que les noms et le crédit restant."""
+        mdp, code = str(corps.get("mdp") or ""), str(corps.get("code") or "")
+        try:
+            with VERROU:
+                if action == "creer":
+                    return self._envoyer(200, {"ok": True, "code": coffre.creer(mdp), "app": etat_app()})
+                if action == "liste":
+                    cles = coffre.lire(mdp)
+                    liste = []
+                    for c in cles:
+                        try:
+                            n = restant(compte_serpapi(c["cle"]))
+                        except CleRefusee:
+                            n = None
+                        liste.append({"nom": c["nom"], "restant": n})
+                    return self._envoyer(200, {"ok": True, "cles": liste})
+                if action == "ajouter":
+                    nom, cle = str(corps.get("nom") or "").strip()[:40], str(corps.get("cle") or "").strip()
+                    if not nom:
+                        return self._envoyer(400, {"erreur": "Donnez un nom à cette clé (par exemple le prénom de la personne)."})
+                    cles = coffre.lire(mdp)
+                    n = restant(compte_serpapi(cle))
+                    cles = [c for c in cles if c["nom"] != nom] + [{"nom": nom, "cle": cle}]
+                    coffre.enregistrer(mdp, cles)
+                    releve.log.info("coffre : clé « %s » ajoutée", nom)
+                    return self._envoyer(200, {"ok": True, "restant": n})
+                if action == "retirer":
+                    nom = str(corps.get("nom") or "")
+                    coffre.enregistrer(mdp, [c for c in coffre.lire(mdp) if c["nom"] != nom])
+                    releve.log.info("coffre : clé « %s » retirée", nom)
+                    return self._envoyer(200, {"ok": True})
+                if action == "utiliser":
+                    nom = str(corps.get("nom") or "")
+                    cles = coffre.lire(mdp)
+                    choisie = next((c for c in cles if c["nom"] == nom), None)
+                    if not choisie:
+                        return self._envoyer(404, {"erreur": "Cette clé n'est plus dans le coffre."})
+                    cfg = releve.config()
+                    reste = [c for c in cles if c["nom"] != nom]
+                    if cfg["serpapi_cle"] and all(c["cle"] != cfg["serpapi_cle"] for c in reste):
+                        ancien = cfg.get("serpapi_nom") or "Clé précédente"
+                        reste = [c for c in reste if c["nom"] != ancien] + [{"nom": ancien, "cle": cfg["serpapi_cle"]}]
+                    coffre.enregistrer(mdp, reste)  # l'ancienne clé active retourne dans le coffre
+                    activer_cle(cfg, choisie["cle"], nom)
+                    releve.log.info("coffre : clé « %s » devenue la clé active", nom)
+                    return self._envoyer(200, {"ok": True, "app": etat_app()})
+                if action == "nouveau-mdp":
+                    nouveau_code = coffre.nouveau_mdp(str(corps.get("nouveau") or ""), mdp=mdp or None, code=code or None)
+                    releve.log.info("coffre : mot de passe changé%s", " (code de secours renouvelé)" if nouveau_code else "")
+                    return self._envoyer(200, {"ok": True, "code": nouveau_code})
+                if action == "supprimer" and corps.get("confirmer") is True:
+                    coffre.supprimer()
+                    releve.log.info("coffre supprimé")
+                    return self._envoyer(200, {"ok": True, "app": etat_app()})
+        except coffre.CoffreErreur as e:
+            return self._envoyer(400, {"erreur": str(e)})
+        except CleRefusee as e:
+            return self._envoyer(e.code, {"erreur": str(e)})
+        return self._envoyer(404, {"erreur": "Action inconnue."})
+
     def log_message(self, *a):
         pass
 
@@ -123,7 +232,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 "resumes": {p["id"]: build.resume_projet(p) for p in liste},
                 "statut": {"en_cours": releve_actif(), "progression": progression()},
                 "reglages": {"serpapi": bool(cfg["serpapi_cle"]), "notifications": cfg["notifications"],
-                             "google_seul": cfg["google_seul"],
+                             "google_seul": cfg["google_seul"], "heure": cfg["heure"], "serpapi_nom": cfg["serpapi_nom"],
                              "serpapi_max_mois": cfg["serpapi_max_mois"], "dossier": chemins.donnees(),
                              "programmee": installation.est_installee(), "app": etat_app(),
                              "theme": cfg["theme"], "version": maj.version(), "maj": maj.ETAT,
@@ -202,35 +311,21 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._envoyer(200, {"ok": True})
 
         if chemin == "/api/verifier-cle":
-            # Vérifie une clé SerpApi auprès de SerpApi (page « compte » : ne consomme aucune recherche),
-            # puis l'enregistre si elle est valide. La clé n'est jamais écrite dans le journal.
+            # Vérifie une clé auprès de SerpApi puis en fait la clé active. Jamais écrite dans le journal.
             cle = str(corps.get("cle") or "").strip() or releve.config()["serpapi_cle"]
-            if not cle:
-                return self._envoyer(400, {"erreur": "Collez d'abord la clé dans le champ."})
-            if len(cle) > 200 or not cle.isalnum():
-                return self._envoyer(400, {"erreur": "Ce texte ne ressemble pas à une clé : elle ne contient que des lettres et des chiffres."})
-            import urllib.error
-            import urllib.parse
             try:
-                compte = releve.https_json("https://serpapi.com/account.json?" + urllib.parse.urlencode({"api_key": cle}))
-            except urllib.error.HTTPError as e:
-                if e.code in (401, 403):
-                    return self._envoyer(400, {"erreur": "SerpApi refuse cette clé. Vérifiez qu'elle est copiée en entier."})
-                return self._envoyer(502, {"erreur": f"SerpApi ne répond pas correctement (code {e.code}). Réessayez plus tard."})
-            except (OSError, ValueError):
-                return self._envoyer(502, {"erreur": "Impossible de joindre SerpApi. Vérifiez la connexion internet."})
-            if compte.get("error"):
-                return self._envoyer(400, {"erreur": "SerpApi refuse cette clé. Vérifiez qu'elle est copiée en entier."})
+                compte = compte_serpapi(cle)
+            except CleRefusee as e:
+                return self._envoyer(e.code, {"erreur": str(e)})
             with VERROU:
                 cfg = releve.config()
-                cfg["serpapi_cle"] = cle
-                if chemins.SYSTEME == "Darwin":  # sur Mac, Kayak et Momondo refusent la recherche automatique
-                    cfg["google_seul"] = True
-                releve.sauver_config(cfg)
-            releve.log.info("clé SerpApi vérifiée et enregistrée (offre : %s)", compte.get("plan_name") or "?")
-            restant = compte.get("total_searches_left", compte.get("plan_searches_left"))
+                activer_cle(cfg, cle, str(corps.get("nom") or cfg.get("serpapi_nom") or "Ma clé").strip())
+            releve.log.info("clé Google Flights vérifiée et enregistrée (offre : %s)", compte.get("plan_name") or "?")
             return self._envoyer(200, {"ok": True, "serpapi": True, "google_seul": cfg["google_seul"], "offre": compte.get("plan_name") or "",
-                                       "restant": restant if isinstance(restant, int) else None, "app": etat_app()})
+                                       "restant": restant(compte), "app": etat_app()})
+
+        if chemin.startswith("/api/coffre/"):
+            return self._coffre(chemin[len("/api/coffre/"):], corps)
 
         if chemin == "/api/reglages":
             with VERROU:
@@ -240,7 +335,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 if "google_seul" in corps:
                     cfg["google_seul"] = bool(corps["google_seul"])
                 if corps.get("effacer_serpapi"):
-                    cfg.update(serpapi_cle="", google_seul=False)
+                    cfg.update(serpapi_cle="", serpapi_nom="", google_seul=False)
                 if cfg["google_seul"] and not cfg["serpapi_cle"]:
                     return self._envoyer(400, {"erreur": "Saisissez une clé SerpApi pour utiliser Google Flights seul."})
                 if "notifications" in corps:
@@ -249,7 +344,21 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     cfg["accueil_vu"] = bool(corps["accueil_vu"])
                 if corps.get("theme") in ("clair", "sombre", "auto"):
                     cfg["theme"] = corps["theme"]
+                nouvelle_heure = None
+                if "heure" in corps:
+                    try:
+                        nouvelle_heure = int(corps["heure"])
+                    except (TypeError, ValueError):
+                        nouvelle_heure = -1
+                    if not 0 <= nouvelle_heure <= 23:
+                        return self._envoyer(400, {"erreur": "Choisissez une heure entre 0 et 23."})
+                    cfg["heure"] = nouvelle_heure
                 releve.sauver_config(cfg)
+                if nouvelle_heure is not None and not os.environ.get("TRACKFLIGHT_SANS_INSTALLATION"):
+                    ok, msg = installation.installer(force=True)  # reprogramme la recherche à la nouvelle heure
+                    ETAT["installation"] = None if ok else msg
+                    if not ok:
+                        return self._envoyer(409, {"erreur": "L'heure est enregistrée mais la programmation a échoué : " + msg})
                 return self._envoyer(200, {"ok": True, "serpapi": bool(cfg["serpapi_cle"]),
                                            "google_seul": cfg["google_seul"], "notifications": cfg["notifications"],
                                            "app": etat_app()})

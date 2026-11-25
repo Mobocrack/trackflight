@@ -1,4 +1,4 @@
-"""Programme la recherche quotidienne (9 h) et son rattrapage à l'ouverture de session.
+"""Programme la recherche quotidienne (9 h par défaut, réglable) et son rattrapage à l'ouverture de session.
 
 Windows : une tâche planifiée de l'utilisateur (aucun droit administrateur).
 Mac : un agent de lancement dans ~/Library/LaunchAgents.
@@ -21,12 +21,22 @@ SANS_FENETRE = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 _PS_INSTALLER = r"""
 $a = New-ScheduledTaskAction -Execute $env:MV_EXE -Argument $env:MV_ARGS
-$t1 = New-ScheduledTaskTrigger -Daily -At 09:00
+$t1 = New-ScheduledTaskTrigger -Daily -At $env:MV_HEURE
 $t2 = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 $t2.Delay = 'PT5M'
 $s = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 2) -MultipleInstances IgnoreNew
 Register-ScheduledTask -TaskName $env:MV_TACHE -Action $a -Trigger @($t1, $t2) -Settings $s -Description 'Relève les prix de vos voyages (application Trackflight).' -Force | Out-Null
 """
+
+
+def heure():
+    """Heure choisie dans les réglages (config.json), 9 h par défaut."""
+    try:
+        with open(os.path.join(chemins.donnees(), "config.json"), encoding="utf-8") as f:
+            h = int(json.load(f).get("heure", 9))
+        return h if 0 <= h <= 23 else 9
+    except (OSError, ValueError, TypeError):
+        return 9
 
 
 def _commande():
@@ -59,7 +69,7 @@ def installer(force=False):
     if "/AppTranslocation/" in exe:
         # macOS lance les apps téléchargées depuis un emplacement temporaire : la programmation y serait perdue.
         return False, "Glissez « Trackflight » dans le dossier Applications, puis rouvrez-la depuis là."
-    signature = {"exe": exe, "args": args}
+    signature = {"exe": exe, "args": args, "heure": heure()}
     try:
         with open(FICHIER, encoding="utf-8") as f:
             deja = json.load(f)
@@ -70,7 +80,7 @@ def installer(force=False):
     try:
         if chemins.SYSTEME == "Windows":
             arg_txt = " ".join(f'"{a}"' if " " in a else a for a in args)
-            env = dict(os.environ, MV_EXE=exe, MV_ARGS=arg_txt, MV_TACHE=TACHE)
+            env = dict(os.environ, MV_EXE=exe, MV_ARGS=arg_txt, MV_TACHE=TACHE, MV_HEURE=f"{heure():02d}:00")
             r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", _PS_INSTALLER], env=env,
                                capture_output=True, text=True, timeout=60, creationflags=SANS_FENETRE)
             if r.returncode:
@@ -79,7 +89,7 @@ def installer(force=False):
             os.makedirs(os.path.dirname(_plist()), exist_ok=True)
             with open(_plist(), "wb") as f:
                 plistlib.dump({"Label": AGENT, "ProgramArguments": [exe, *args], "RunAtLoad": True,
-                               "StartCalendarInterval": {"Hour": 9, "Minute": 0},
+                               "StartCalendarInterval": {"Hour": heure(), "Minute": 0},
                                "StandardErrorPath": os.path.join(chemins.donnees(), "planificateur.err")}, f)
             subprocess.run(["launchctl", "unload", _plist()], capture_output=True)
             r = subprocess.run(["launchctl", "load", _plist()], capture_output=True, text=True)

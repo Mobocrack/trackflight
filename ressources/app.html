@@ -117,6 +117,7 @@ a{color:var(--accent-text);text-decoration:none}
 .chip{font-size:12.5px;font-weight:500;padding:3px 9px;border-radius:980px;background:var(--fill-2);color:var(--text-2)}
 .chip.green{background:var(--green-soft);color:var(--green)}
 .chip.orange{background:var(--orange-soft);color:var(--orange)}
+.logo-cie{width:18px;height:18px;object-fit:contain;vertical-align:-4px;margin-right:6px;border-radius:4px;background:#fff}
 .chip.red{background:rgba(255,59,48,.14);color:var(--red)}
 
 .alts{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
@@ -206,7 +207,7 @@ dialog[open] .sheet{animation:feuille .42s var(--ease)}
 .cell+.cell::before{content:"";position:absolute;top:0;left:16px;right:0;height:1px;background:var(--sep)}
 .cell label,.cell .lab{flex:none;font-size:15px}
 .cell .hint{display:block;font-size:12.5px;color:var(--text-2)}
-.cell input[type=text],.cell input[type=number],.cell input[type=date],.cell select{border:0;background:transparent;text-align:right;outline:none;min-width:0;flex:1;font-size:15px;padding:8px 0;color:var(--text)}
+.cell input[type=password],.cell input[type=text],.cell input[type=number],.cell input[type=date],.cell select{border:0;background:transparent;text-align:right;outline:none;min-width:0;flex:1;font-size:15px;padding:8px 0;color:var(--text)}
 .cell input::placeholder{color:var(--text-3)}
 .cell select{appearance:none;-webkit-appearance:none;cursor:pointer;color:var(--accent-text);text-align-last:right}
 .cell.col{flex-direction:column;align-items:stretch;gap:8px;padding:12px 16px}
@@ -357,6 +358,7 @@ dialog[open] .sheet{animation:feuille .42s var(--ease)}
 
 <dialog id="d-edit" class="bottom"><form class="sheet" id="f-edit" novalidate></form></dialog>
 <dialog id="d-reglages" class="bottom"><div class="sheet" id="s-reglages"></div></dialog>
+<dialog id="d-coffre" class="bottom"><div class="sheet" id="s-coffre"></div></dialog>
 <dialog id="d-journal" class="bottom"><div class="sheet" id="s-journal"></div></dialog>
 <dialog id="d-confirm"><div class="alert" id="s-confirm"></div></dialog>
 <div class="wiz" id="wiz" hidden></div>
@@ -430,6 +432,7 @@ async function charger(){
   await afficher(sel, false, !matchMedia("(max-width: 760px)").matches || !!voulu);
   if (D.statut.en_cours) suivre();
   if (!D.reglages.accueil_vu && $("#wiz").hidden) tutoriel();
+  else if (D.reglages.app.cle_epuisee && D.reglages.app.coffre && !COFFRE_PROPOSE) { COFFRE_PROPOSE = true; ouvrirCoffre("epuisee"); }
 }
 async function voyage(id, frais=false){
   if (!id) return null;
@@ -465,6 +468,8 @@ function dessinerPied(prog){
     html = `<div class="grow"><b>Version ${esc(D.reglages.maj.derniere)} disponible</b>Nouveautés et corrections.</div><button class="btn primary" id="b-maj" style="padding:6px 12px;font-size:13px">Mettre à jour</button>`;
   } else if (a.navigateur_requis && !a.navigateur_pret && a.navigateur_erreur && !a.navigateur_prepa) {
     html = `<div class="grow"><b>Navigateur de recherche indisponible</b>Cliquez sur Rechercher pour réessayer, ou configurez Google Flights dans les réglages.</div><button class="btn" id="b-recherche-reglages">Réglages</button>`;
+  } else if (a.cle_epuisee) {
+    html = `<div class="grow"><b>Clé Google Flights épuisée</b>${a.coffre ? "Choisissez une autre clé dans le coffre." : "Plus de recherches ce mois-ci pour cette clé."}</div><button class="btn" id="b-coffre">${a.coffre ? "Coffre" : "Réglages"}</button>`;
   } else if (a.releve_erreur) {
     html = `<div class="grow"><b>Dernière recherche sans résultat</b>${esc(a.releve_erreur.message)}</div><button class="btn" id="b-recherche-reglages">Réglages</button>`;
   } else if (a.navigateur_prepa) {
@@ -472,11 +477,12 @@ function dessinerPied(prog){
   } else if (!D.reglages.programmee) {
     html = `<div class="grow"><b>Recherche automatique inactive</b>Ouvrez les réglages pour l'activer.</div>`;
   } else {
-    html = `<div class="grow"><b>Prix mis à jour chaque jour</b>Prochaine recherche à 9 h, ou au démarrage de l'ordinateur.</div>`;
+    html = `<div class="grow"><b>Prix mis à jour chaque jour</b>Prochaine recherche à ${D.reglages.heure ?? 9} h, ou au démarrage de l'ordinateur.</div>`;
   }
   $("#foot").innerHTML = html;
   const bm = $("#b-maj"); if (bm) bm.onclick = mettreAJour;
   const br = $("#b-recherche-reglages"); if (br) br.onclick = reglages;
+  const bc = $("#b-coffre"); if (bc) bc.onclick = () => a.coffre ? ouvrirCoffre("epuisee") : reglages();
 }
 function mettreAJour(){
   confirmer(`Installer la version ${D.reglages.maj.derniere} ?`, "Trackflight va télécharger la mise à jour, se fermer, s'installer puis se rouvrir. Vos voyages sont conservés.", "Mettre à jour", async () => {
@@ -551,10 +557,13 @@ function legHTML(t){
     <div class="pt end"><span class="time">${tempsHTML(t.arrivee)}</span><span class="code">${esc(b)}</span></div>
   </div>`;
 }
+/* Logo de la compagnie (fourni par Google Flights) ; rien si absent ou s'il ne se charge pas. */
+const logo = v => v.logo ? `<img class="logo-cie" src="${esc(v.logo)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : "";
 function badges(v, ligne=false){
   return [direct(v) && !ligne ? '<span class="chip green">Direct</span>' : "",
     v.depart < "05:00" ? '<span class="chip orange">Part la nuit précédente</span>' : "",
-    v.autonome ? '<span class="chip orange">Billets séparés</span>' : ""].join("");
+    v.autonome ? '<span class="chip orange">Billets séparés</span>' : "",
+    ...(v.formalites || []).map(f => `<span class="chip orange" title="${esc(f.long)}. Pour un passeport français ; vérifiez sur le site officiel avant de réserver.">${esc(ligne ? f.court : f.long)}</span>`)].join("");
 }
 /* Repère de Google Flights : le prix est-il bas, normal ou élevé pour ce trajet, et comment a-t-il évolué ces dernières semaines.
    Google donne des prix pour l'ensemble des voyageurs : on les ramène au prix par personne, comme le reste de l'app. */
@@ -606,7 +615,7 @@ function corps(p, V){
         ${c.retour ? `<span class="leg-title">Aller · ${esc(jour(c.date,{weekday:"long",day:"numeric",month:"long"}))}</span>` : `<span class="leg-title">${esc(jour(c.date,{weekday:"long",day:"numeric",month:"long"}))}</span>`}
         ${legHTML(c)}
         ${c.retour ? `<span class="leg-title">Retour · ${esc(jour(c.retour.date,{weekday:"long",day:"numeric",month:"long"}))}</span>${legHTML(c.retour)}` : ""}
-        <div class="chips"><span class="chip">${esc(c.compagnie)}</span>${c.escale_detail ? `<span class="chip">Escale ${esc(c.escale_detail)}</span>` : ""}${badges(c)}</div>
+        <div class="chips"><span class="chip">${logo(c)}${esc(c.compagnie)}</span>${c.escale_detail ? `<span class="chip">Escale ${esc(c.escale_detail)}</span>` : ""}${badges(c)}</div>
       </div>
     </section>`;
     const val = v => v.prix + ((v.duree + (v.retour ? v.retour.duree : 0)) / 60) * 25;
@@ -647,7 +656,7 @@ function ligneVol(v, i, p){
     <button class="row-main" aria-expanded="false">
       <span class="r-time">${tempsHTML(v.depart)} → ${tempsHTML(v.arrivee)}${r ? `<span class="ret">${tempsHTML(r.depart)} → ${tempsHTML(r.arrivee)}</span>` : ""}</span>
       <span class="r-dur">${dur(v.duree)}${r ? `<span class="ret">${dur(r.duree)}</span>` : ""}</span>
-      <span class="r-info"><b>${esc(v.compagnie)}</b><span>${esc(jour(v.date))} · ${v.escales ? `${v.escales} escale${v.escales>1?"s":""} à ${esc(v.via)}` : "direct"}${r ? ` · retour ${r.escales ? "via " + esc(r.via) : "direct"}` : ""}</span> <span class="chips" style="display:inline-flex;margin-left:4px">${badges(v, true)}</span></span>
+      <span class="r-info"><b>${logo(v)}${esc(v.compagnie)}</b><span>${esc(jour(v.date))} · ${v.escales ? `${v.escales} escale${v.escales>1?"s":""} à ${esc(v.via)}` : "direct"}${r ? ` · retour ${r.escales ? "via " + esc(r.via) : "direct"}` : ""}</span> <span class="chips" style="display:inline-flex;margin-left:4px">${badges(v, true)}</span></span>
       <span class="r-price">${eur(v.prix)}${n > 1 ? `<small>${eur(v.prix_total)} au total</small>` : ""}</span>
     </button>
     <div class="row-more">${obs.map((o, k) => `<a class="offer${k === 0 && obs.length > 1 ? " best" : ""}" href="${esc(o.lien)}" target="_blank" rel="noopener"><span>${esc(o.source)} ↗</span><b>${eur(o.prix)}</b></a>`).join("")}</div>
@@ -761,7 +770,7 @@ function nouveau(){
   return {id:"", nom:"", actif:true, origine:{code:"PAR", nom:"Paris", aeroports:"CDG,ORY"}, destination:{code:"", nom:"", aeroports:""},
     type:"aller", date_aller:d.toISOString().slice(0,10), flex:0, date_retour:"", adultes:1, enfants:0, bebes:0, classe:"eco",
     escales:"tous", duree_max_h:null, billets_separes:false,
-    alertes:{seuil_escale:null, seuil_direct:null, baisse_min:30, plafond_baisse_escale:null, plafond_baisse_direct:null}};
+    alertes:{seuil_escale:null, seuil_direct:null, baisse_min:30, plafond_baisse_escale:null, plafond_baisse_direct:null, record:true}};
 }
 function erreurs(p){
   const e = {};
@@ -806,6 +815,7 @@ function editer(p, copie=false){
     </div></div>
 
     <div><div class="grp-title">Alertes</div><div class="grp">
+      <div class="cell"><label class="toggle" style="color:var(--text);font-size:15px;justify-content:space-between;width:100%"><span>Prévenir à chaque nouveau meilleur prix<span class="hint">Sous le plus bas déjà vu pour ce voyage</span></span><input type="checkbox" id="e-record"><span class="switch"></span></label></div>
       <div class="cell"><label for="e-se">Prévenir si un vol avec escale passe sous (€ par personne)</label><input type="number" id="e-se" min="0" step="10" placeholder="Jamais" inputmode="numeric"></div>
       <div class="cell"><label for="e-sd">Prévenir si un vol direct passe sous (€ par personne)</label><input type="number" id="e-sd" min="0" step="10" placeholder="Jamais" inputmode="numeric"></div>
       <div class="cell"><label for="e-bm">Prévenir si un prix baisse d'au moins (€ par personne)</label><input type="number" id="e-bm" min="0" step="5" placeholder="Jamais" inputmode="numeric"></div>
@@ -831,6 +841,7 @@ function editer(p, copie=false){
   lier("#e-sep", (v, el) => B.billets_separes = el.checked, "change");
   lier("#e-se", v => B.alertes.seuil_escale = v === "" ? null : +v); lier("#e-sd", v => B.alertes.seuil_direct = v === "" ? null : +v);
   lier("#e-bm", v => B.alertes.baisse_min = v === "" ? null : +v); lier("#e-nom", v => B.nom = v);
+  $("#e-record").checked = B.alertes.record !== false; lier("#e-record", (v, el) => B.alertes.record = el.checked, "change");
   const noteAlertes = () => { const n = nPass(B), s = B.alertes.seuil_escale || B.alertes.seuil_direct;
     $("#e-alertes-note").textContent = "Montants par personne, c'est-à-dire pour un seul billet." + (n > 1
       ? ` Pour vos ${n} voyageurs, multipliez par ${n}${s ? ` (${eur(s)} par personne = ${eur(s * n)} au total)` : ""}.` : "")
@@ -945,6 +956,103 @@ function journal(){
   if (!d.open) d.showModal();
 }
 
+/* ------------------------------------------------------------ coffre à clés (Réglages > Coffre à clés)
+   Réserve chiffrée de clés prêtées par d'autres personnes, avec leur accord. Le mot de passe reste dans cette fenêtre
+   tant qu'elle est ouverte, puis il est oublié. Les clés elles-mêmes ne quittent jamais l'ordinateur. */
+let COFFRE_PROPOSE = false;
+function ouvrirCoffre(motif){
+  const d = $("#d-coffre"), S = {mdp: ""};
+  const champ = (id, label, type="password", ph="") => `<div class="cell"><label for="${id}">${label}</label><input type="${type}" id="${id}" autocomplete="off" spellcheck="false" placeholder="${ph}"></div>`;
+  const tete = titre => `<div class="sheet-head"><span></span><h3>${titre}</h3><button class="btn link" style="font-weight:600" id="k-ok">Fermer</button></div>`;
+  const msg = (t, ok) => `<p class="foot-note" id="k-msg" role="status" style="color:${ok ? "var(--green)" : "var(--red)"}" ${t ? "" : "hidden"}>${esc(t || "")}</p>`;
+  const erreur = e => { const m = $("#k-msg"); m.textContent = e.message || e; m.style.color = "var(--red)"; m.hidden = false; };
+  const brancherFermer = () => { $("#k-ok").onclick = () => d.close(); };
+  const intro = motif === "epuisee" ? `<p class="aide" style="margin:0"><b>Votre clé Google Flights n'a plus de crédit.</b> Ouvrez le coffre pour utiliser la clé d'une autre personne (avec son accord).</p>` : "";
+  function ecranCreer(){
+    $("#s-coffre").innerHTML = tete("Créer le coffre") + `<div class="sheet-body">
+      <p class="aide" style="margin:0">Le coffre range les clés que d'autres personnes vous prêtent. Il est chiffré par un mot de passe que vous choisissez (8 caractères minimum).</p>
+      <div class="grp">${champ("k-m1", "Mot de passe")}${champ("k-m2", "Confirmer")}</div>${msg()}
+      <button class="btn primary" id="k-creer">Créer le coffre</button></div>`;
+    brancherFermer();
+    $("#k-creer").onclick = async () => {
+      if ($("#k-m1").value !== $("#k-m2").value) return erreur("Les deux mots de passe sont différents.");
+      try { const r = await api("/api/coffre/creer", {mdp: $("#k-m1").value}); D.reglages.app = r.app; S.mdp = $("#k-m1").value; ecranCode(r.code, "Coffre créé"); }
+      catch (e) { erreur(e); }
+    };
+  }
+  function ecranCode(code, titre){
+    $("#s-coffre").innerHTML = tete(titre) + `<div class="sheet-body">
+      <p class="aide" style="margin:0">Voici votre <b>code de secours</b>. Il rouvre le coffre si vous oubliez le mot de passe. Notez-le maintenant (papier ou gestionnaire de mots de passe) : il ne sera plus jamais affiché.</p>
+      <pre style="font:600 22px ui-monospace,Menlo,Consolas,monospace;text-align:center;background:var(--fill);border-radius:12px;padding:16px;margin:0;user-select:all">${esc(code)}</pre>
+      <button class="btn primary" id="k-note">J'ai noté le code</button></div>`;
+    brancherFermer(); $("#k-note").onclick = () => S.mdp ? ecranListe() : ecranOuvrir();
+  }
+  function ecranOuvrir(){
+    $("#s-coffre").innerHTML = tete("Coffre à clés") + `<div class="sheet-body">${intro}
+      <div class="grp">${champ("k-mdp", "Mot de passe du coffre")}</div>${msg()}
+      <button class="btn primary" id="k-ouvrir">Ouvrir</button>
+      <button class="btn link" id="k-oubli" style="align-self:flex-start">Mot de passe oublié ?</button></div>`;
+    brancherFermer();
+    const go = async () => { S.mdp = $("#k-mdp").value; try { await ecranListe(); } catch (e) { S.mdp = ""; erreur(e); } };
+    $("#k-ouvrir").onclick = go; $("#k-mdp").onkeydown = e => { if (e.key === "Enter") go(); };
+    $("#k-oubli").onclick = ecranOubli; setTimeout(() => $("#k-mdp").focus(), 50);
+  }
+  function ecranOubli(){
+    $("#s-coffre").innerHTML = tete("Mot de passe oublié") + `<div class="sheet-body">
+      <p class="aide" style="margin:0">Saisissez le code de secours noté à la création du coffre, puis choisissez un nouveau mot de passe. Un nouveau code de secours sera créé.</p>
+      <div class="grp">${champ("k-code", "Code de secours", "text", "XXXX-XXXX-XXXX-XXXX-XXXX")}${champ("k-n1", "Nouveau mot de passe")}${champ("k-n2", "Confirmer")}</div>${msg()}
+      <button class="btn primary" id="k-valider">Changer le mot de passe</button>
+      <p class="foot-note">Sans mot de passe ni code, le coffre ne peut plus être ouvert : supprimez-le et recréez-le, chaque personne retrouve sa clé sur serpapi.com. <a href="#" id="k-suppr">Supprimer le coffre</a></p></div>`;
+    brancherFermer();
+    $("#k-valider").onclick = async () => {
+      if ($("#k-n1").value !== $("#k-n2").value) return erreur("Les deux mots de passe sont différents.");
+      try { const r = await api("/api/coffre/nouveau-mdp", {code: $("#k-code").value, nouveau: $("#k-n1").value}); S.mdp = $("#k-n1").value; ecranCode(r.code, "Nouveau code de secours"); }
+      catch (e) { erreur(e); }
+    };
+    $("#k-suppr").onclick = e => { e.preventDefault(); d.close();
+      confirmer("Supprimer le coffre ?", "Les clés qu'il contient seront effacées de cet ordinateur. La clé active n'est pas touchée.", "Supprimer",
+        async () => { try { const r = await api("/api/coffre/supprimer", {confirmer: true}); D.reglages.app = r.app; dessinerPied(); toast("Coffre supprimé"); } catch (err) { toast(err.message); } }); };
+  }
+  async function ecranListe(){
+    const r = await api("/api/coffre/liste", {mdp: S.mdp});
+    const actif = D.reglages.serpapi ? esc(D.reglages.serpapi_nom || "Ma clé") : "aucune";
+    $("#s-coffre").innerHTML = tete("Coffre à clés") + `<div class="sheet-body">${intro}
+      <p class="foot-note" style="margin:0">Clé active : <b>${actif}</b>. Utiliser une clé du coffre la rend active ; l'ancienne retourne dans le coffre.</p>
+      <div class="grp">${r.cles.length ? r.cles.map((c, i) => `<div class="cell"><span class="lab">${esc(c.nom)}<span class="hint">${c.restant == null ? "crédit inconnu" : c.restant + " recherches restantes"}</span></span>
+        <span><button class="btn link" data-util="${i}">Utiliser</button><button class="btn link" data-ret="${i}" style="color:var(--red)">Retirer</button></span></div>`).join("")
+        : `<div class="cell"><span class="muted">Le coffre est vide.</span></div>`}</div>
+      <div class="grp-title">Ajouter une clé</div>
+      <div class="grp">${champ("k-nom", "Nom de la personne", "text", "Axel")}${champ("k-cle", "Clé Google Flights")}</div>${msg()}
+      <button class="btn" id="k-ajouter">Vérifier et ajouter</button>
+      <p class="foot-note">Ajoutez seulement des clés que leurs propriétaires vous ont confiées. <a href="#" id="k-chg">Changer le mot de passe</a></p></div>`;
+    brancherFermer();
+    $("#k-ajouter").onclick = async () => { const b = $("#k-ajouter"); b.disabled = true; b.textContent = "Vérification…";
+      try { await api("/api/coffre/ajouter", {mdp: S.mdp, nom: $("#k-nom").value, cle: $("#k-cle").value.trim()}); toast("Clé ajoutée au coffre"); await ecranListe(); }
+      catch (e) { erreur(e); b.disabled = false; b.textContent = "Vérifier et ajouter"; } };
+    document.querySelectorAll("#s-coffre [data-util]").forEach(b => b.onclick = async () => {
+      const nom = r.cles[+b.dataset.util].nom;
+      try { const x = await api("/api/coffre/utiliser", {mdp: S.mdp, nom}); D.reglages.app = x.app; D.reglages.serpapi = true; D.reglages.serpapi_nom = nom;
+        dessinerPied(); toast(`La clé de ${nom} est maintenant active`); await ecranListe(); } catch (e) { erreur(e); } });
+    document.querySelectorAll("#s-coffre [data-ret]").forEach(b => b.onclick = async () => {
+      try { await api("/api/coffre/retirer", {mdp: S.mdp, nom: r.cles[+b.dataset.ret].nom}); await ecranListe(); } catch (e) { erreur(e); } });
+    $("#k-chg").onclick = e => { e.preventDefault(); ecranChanger(); };
+  }
+  function ecranChanger(){
+    $("#s-coffre").innerHTML = tete("Changer le mot de passe") + `<div class="sheet-body">
+      <div class="grp">${champ("k-n1", "Nouveau mot de passe")}${champ("k-n2", "Confirmer")}</div>${msg()}
+      <button class="btn primary" id="k-valider">Changer</button></div>`;
+    brancherFermer();
+    $("#k-valider").onclick = async () => {
+      if ($("#k-n1").value !== $("#k-n2").value) return erreur("Les deux mots de passe sont différents.");
+      try { await api("/api/coffre/nouveau-mdp", {mdp: S.mdp, nouveau: $("#k-n1").value}); S.mdp = $("#k-n1").value; toast("Mot de passe changé"); await ecranListe(); }
+      catch (e) { erreur(e); }
+    };
+  }
+  d.onclose = () => { S.mdp = ""; $("#s-coffre").innerHTML = ""; };  // le mot de passe est oublié à la fermeture
+  (D.reglages.app.coffre ? ecranOuvrir : ecranCreer)();
+  if (!d.open) d.showModal();
+}
+
 function reglages(){
   const R = D.reglages, a = R.app;
   $("#s-reglages").innerHTML = `<div class="sheet-head"><span></span><h3>Réglages</h3><button class="btn link" style="font-weight:600" id="r-ok">OK</button></div>
@@ -958,13 +1066,16 @@ function reglages(){
       <div class="cell"><span class="lab">Autorisations</span><button class="btn link" id="r-ouvrir">Ouvrir les réglages de l'ordinateur</button></div>
     </div></div>
     <div><div class="grp-title">Recherche automatique</div><div class="grp">
-      <div class="cell"><span class="lab">Chaque jour à 9 h</span><span class="muted">${R.programmee ? "Activée" : "Inactive"}</span></div>
+      <div class="cell"><span class="lab">Recherche quotidienne</span><span class="muted">${R.programmee ? "Activée" : "Inactive"}</span></div>
+      <div class="cell"><label for="r-heure">Heure de la recherche</label><select id="r-heure">${Array.from({length:24}, (_, h) => `<option value="${h}" ${h === (R.heure ?? 9) ? "selected" : ""}>${h} h</option>`).join("")}</select></div>
       ${a.navigateur_requis ? `<div class="cell"><span class="lab">Navigateur de recherche</span><span class="muted">${a.navigateur_pret ? "Prêt" : a.navigateur_prepa ? "Téléchargement…" : a.navigateur_erreur ? "Échec du téléchargement" : "À préparer"}</span></div>` : ""}
-    </div><p class="foot-note">${R.programmee ? "Si l'ordinateur est éteint à 9 h, la recherche se fait à son prochain démarrage." : esc(a.installation || "La programmation sera retentée au prochain lancement de l'application.")}</p></div>
+    </div><p class="foot-note">${R.programmee ? `Si l'ordinateur est éteint à ${R.heure ?? 9} h, la recherche se fait à son prochain démarrage. Choisissez une heure où l'ordinateur est souvent allumé.` : esc(a.installation || "La programmation sera retentée au prochain lancement de l'application.")}</p></div>
     <div><div class="grp-title">Google Flights (facultatif)</div><div class="grp">
       <div class="cell"><label for="r-cle">Clé Google Flights</label><input type="password" id="r-cle" placeholder="${R.serpapi ? "Enregistrée" : "Aucune"}" autocomplete="off" spellcheck="false"></div>
       <div class="cell"><button class="btn link" id="r-coller">Coller</button><button class="btn link" id="r-verifier-cle">${R.serpapi ? "Vérifier la clé" : "Vérifier et enregistrer"}</button></div>
       <div class="cell"><label class="toggle" style="color:var(--text);font-size:15px;justify-content:space-between;width:100%"><span>Utiliser seulement Google Flights</span><input type="checkbox" id="r-google-seul" ${R.google_seul ? "checked" : ""}><span class="switch"></span></label></div>
+      <div class="cell"><span class="lab">Clé active</span><span class="muted">${R.serpapi ? esc(R.serpapi_nom || "Ma clé") : "Aucune"}</span></div>
+      <div class="cell"><span class="lab">Coffre à clés</span><button class="btn link" id="r-coffre">${a.coffre ? "Ouvrir" : "Créer"}</button></div>
     </div><p class="foot-note" id="r-cle-etat" role="status" hidden></p>
     <p class="foot-note">La clé vient d'un compte gratuit SerpApi (250 recherches par mois) : <a href="https://serpapi.com/users/sign_up" target="_blank" rel="noopener">créer le compte</a>, puis <a href="https://serpapi.com/manage-api-key" target="_blank" rel="noopener">copier la clé</a>. Elle reste sur cet ordinateur. Si Kayak et Momondo bloquent la recherche, activez « Utiliser seulement Google Flights ».${R.serpapi ? ' <a href="#" id="r-eff">Retirer la clé</a>' : ""}</p>
     <p class="foot-note" id="r-source-erreur" role="alert" style="color:var(--red)" hidden></p></div>
@@ -988,7 +1099,12 @@ function reglages(){
     if (m && m.disponible) { reglages(); dessinerPied(); } else { rv.textContent = m && m.erreur ? "Pas de connexion" : "Vous avez la dernière version"; } };
   $("#r-ouvrir").onclick = () => api("/api/ouvrir-reglages", {}).catch(e => toast(e.message));
   $("#r-tuto").onclick = () => { d.close(); tutoriel(); };
+  $("#r-heure").onchange = async e => {
+    try { await api("/api/reglages", {heure: +e.target.value}); R.heure = +e.target.value; D.reglages.heure = R.heure; dessinerPied(); toast(`Recherche quotidienne à ${R.heure} h`); }
+    catch (err) { toast(err.message); }
+  };
   $("#r-journal").onclick = () => { d.close(); journal(); };
+  $("#r-coffre").onclick = () => { d.close(); ouvrirCoffre(); };
   $("#r-notif").onchange = async e => { await api("/api/reglages", {notifications: e.target.checked}); R.notifications = e.target.checked; };
   $("#r-test").onclick = async () => { try { await api("/api/test-notif", {}); toast("Notification envoyée"); } catch (e) { toast("Les notifications sont bloquées par le système"); } };
   const sauverSource = async opts => {
@@ -1193,13 +1309,14 @@ function contenu(id, p){
       <div class="puces" id="w-dmax">${[[null,"Peu importe"],[12,"12 h"],[16,"16 h"],[21,"21 h"],[24,"24 h"]].map(([v,t]) => `<button type="button" class="puce" data-v="${v ?? ""}" aria-pressed="${(p.duree_max_h ?? null) === v}">${t}</button>`).join("")}</div>
       <label class="rangee" style="cursor:pointer"><div><b>Accepter les billets séparés</b><small>Moins chers, mais sans garantie si un vol a du retard</small></div><span class="toggle"><input type="checkbox" id="w-sep" ${p.billets_separes ? "checked" : ""}><span class="switch"></span></span></label>`;
     case "alertes": return `<h2>Quand voulez-vous être prévenu ?</h2><p class="aide">Une notification apparaît sur cet ordinateur. Les montants sont <b>par personne</b> (le prix d'un billet${p.type === "ar" ? " aller-retour" : ""}).</p>
+      <label class="rangee" style="cursor:pointer"><div><b>Quand un nouveau meilleur prix apparaît</b><small>Dès que le prix passe sous le plus bas déjà vu pour ce voyage (nouveau vol ou baisse lente).</small></div><span class="toggle"><input type="checkbox" id="w-a-record" ${p.alertes.record !== false ? "checked" : ""}><span class="switch"></span></span></label>
       <label class="rangee" style="cursor:pointer"><div><b>Quand un prix baisse</b><small>D'au moins <input type="number" id="w-baisse" value="${p.alertes.baisse_min ?? 30}" min="5" step="5" style="width:64px;border:0;background:var(--fill);border-radius:6px;padding:2px 6px;text-align:right"> € par personne<span class="w-total" id="w-baisse-total"></span></small></div><span class="toggle"><input type="checkbox" id="w-a-baisse" ${W.alerte.baisse ? "checked" : ""}><span class="switch"></span></span></label>
       <label class="rangee" style="cursor:pointer"><div><b>Quand un vol passe sous un prix</b><small>Sous <input type="number" id="w-seuil" value="${p.alertes.seuil_escale ?? ""}" min="0" step="10" placeholder="500" style="width:72px;border:0;background:var(--fill);border-radius:6px;padding:2px 6px;text-align:right"> € par personne<span class="w-total" id="w-seuil-total"></span></small></div><span class="toggle"><input type="checkbox" id="w-a-seuil" ${W.alerte.seuil ? "checked" : ""}><span class="switch"></span></span></label>`;
     case "recap": {
       const auto = `${p.destination.nom.replace(/ \(.*\)$/, "")} ${new Date(p.date_aller + "T12:00:00").toLocaleDateString("fr-FR", {month:"long", year:"numeric"})}`;
       return `<h2>Tout est prêt</h2><p class="recap">${phrase(p)}</p>
         <div class="rangee"><div style="flex:1"><b>Nom du voyage</b><input class="grand" id="w-nom" style="font-size:22px;margin-top:4px" maxlength="60" placeholder="${esc(auto)}" value="${esc(p.nom)}"></div></div>
-        <p class="aide">Les prix seront comparés sur Kayak et Momondo maintenant, puis chaque jour à 9 h.</p>`;
+        <p class="aide">Les prix seront comparés maintenant, puis chaque jour à ${D.reglages.heure ?? 9} h.</p>`;
     }
   }
 }
@@ -1226,6 +1343,7 @@ function brancherEtape(id, p){
       const n = nPass(p), groupe = (id, v) => { $(id).textContent = n > 1 && v ? `, soit ${eur(v * n)} pour vos ${n} voyageurs` : ""; };
       groupe("#w-baisse-total", +$("#w-baisse").value); groupe("#w-seuil-total", s); };
     ["#w-a-baisse", "#w-a-seuil"].forEach(x => $(x).onchange = sync);
+    $("#w-a-record").onchange = e => { p.alertes.record = e.target.checked; };
     $("#w-baisse").oninput = sync; $("#w-seuil").oninput = () => { $("#w-a-seuil").checked = !!$("#w-seuil").value; sync(); }; sync(); }
   if (id === "recap") { const n = $("#w-nom"); n.oninput = () => p.nom = n.value; setTimeout(() => n.focus(), 80); }
 }
@@ -1305,7 +1423,7 @@ function tutoriel(){
       ${mac ? `<p class="aide">Si le Mac demande l’autorisation pour « Éditeur de script », cliquez sur <b>Autoriser</b> : c’est lui qui affiche les alertes de Trackflight.</p>` : ""}`,
     () => {
       const ok = R.programmee, a = R.app;
-      return `<h2>Les prix se mettent à jour tout seuls</h2><p class="aide">Chaque jour à 9 h, Trackflight compare les prix de vos voyages. Si l'ordinateur était éteint, il le fait au démarrage suivant. Pas besoin d'ouvrir l'app.</p>
+      return `<h2>Les prix se mettent à jour tout seuls</h2><p class="aide">Chaque jour à ${R.heure ?? 9} h (réglable dans les Réglages), Trackflight compare les prix de vos voyages. Si l'ordinateur était éteint, il le fait au démarrage suivant. Pas besoin d'ouvrir l'app.</p>
       <div class="rangee"><div><b>${ok ? "Recherche automatique activée" : "Recherche automatique pas encore active"}</b><small>${ok ? "Tout est en place." : esc(a.installation || "Elle sera activée au prochain lancement de Trackflight.")}</small></div><span class="chip ${ok ? "green" : "orange"}">${ok ? "Activée" : "À vérifier"}</span></div>
       ${mac && a.navigateur_requis ? `<div class="rangee"><div><b>Navigateur de recherche</b><small>${a.navigateur_pret ? "Prêt." : a.navigateur_erreur && !a.navigateur_prepa ? "Le téléchargement a échoué. Vous pouvez réessayer ou configurer Google Flights dans les réglages." : "Trackflight prépare le navigateur au premier lancement."}</small></div><span class="chip ${a.navigateur_pret ? "green" : "orange"}">${a.navigateur_pret ? "Prêt" : a.navigateur_erreur && !a.navigateur_prepa ? "Échec" : "À préparer"}</span></div>` : ""}
       <div class="rangee"><div><b>Google Flights</b><small>${R.serpapi ? "Clé enregistrée : les prix Google Flights sont inclus." : mac ? "Sur Mac, ajoutez une clé Google Flights dans les <b>Réglages</b> : c'est elle qui fournit les prix." : "Facultatif : ajoutez une clé Google Flights dans les <b>Réglages</b> pour plus de prix."}</small></div><span class="chip ${R.serpapi ? "green" : "orange"}">${R.serpapi ? "Prête" : "À ajouter"}</span></div>

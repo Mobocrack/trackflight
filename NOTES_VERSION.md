@@ -35,8 +35,10 @@ Sur Mac, Kayak et Momondo refusent la recherche automatique : les prix viennent 
 
 La clé reste sur votre ordinateur. Ne la partagez pas publiquement.
 
+**Coffre à clés (facultatif)** : si une autre personne vous prête sa clé, rangez-la dans Réglages > Google Flights > **Coffre à clés**. Le coffre est protégé par un mot de passe que vous choisissez ; notez bien le **code de secours** affiché à la création. Quand votre clé n'a plus de crédit, Trackflight vous propose d'utiliser une clé du coffre.
+
 ### Ensuite
 - Un guide s'affiche au premier lancement (notifications, recherche automatique, Google Flights).
 - Créez un voyage avec le bouton **+** : quelques questions, une par écran.
-- Les prix sont mis à jour chaque jour à 9 h, ou au démarrage de l'ordinateur s'il était éteint.
-- Une notification apparaît quand un prix passe sous le seuil que vous avez choisi.
+- Les prix sont mis à jour chaque jour à 9 h (heure réglable dans les Réglages), ou au démarrage de l'ordinateur s'il était éteint.
+- Une notification apparaît à chaque nouveau meilleur prix, et quand un prix passe sous le seuil que vous avez choisi.
